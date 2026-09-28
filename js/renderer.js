@@ -10,7 +10,7 @@ const QUAD_VERT = `
 
 const FINAL_FRAG = `
   uniform sampler2D tColor; uniform sampler2D tBloom;
-  uniform float uBloom, uExposure, uTime, uVignette, uGrain, uDamage, uDesat, uFlash, uCA;
+  uniform float uBloom, uExposure, uTime, uVignette, uGrain, uDamage, uDesat, uFlash, uCA, uThermal;
   uniform vec2 uRes;
   varying vec2 vUv;
   vec3 gwRRTFit(vec3 v) {
@@ -31,6 +31,20 @@ const FINAL_FRAG = `
   float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
   void main() {
     vec2 d = vUv - 0.5;
+    if (uThermal > 0.5) {
+      // uncooled microbolometer look: white-hot, a touch of blur, gain, fixed-pattern + temporal noise
+      vec2 px = 1.0 / uRes;
+      float v = texture2D(tColor, vUv).r * 0.4;
+      v += (texture2D(tColor, vUv + vec2(px.x * 1.5, 0.0)).r + texture2D(tColor, vUv - vec2(px.x * 1.5, 0.0)).r
+          + texture2D(tColor, vUv + vec2(0.0, px.y * 1.5)).r + texture2D(tColor, vUv - vec2(0.0, px.y * 1.5)).r) * 0.15;
+      v = (v - 0.16) * 1.6;
+      v += (hash(vUv * uRes + fract(uTime * 13.1) * 57.0) - 0.5) * 0.06;
+      v += (hash(floor(vUv * uRes / 2.0)) - 0.5) * 0.02;
+      v = clamp(v, 0.0, 1.0);
+      v *= 1.0 - 0.3 * smoothstep(0.3, 0.8, length(d * vec2(uRes.x / uRes.y, 1.0)));
+      gl_FragColor = vec4(vec3(pow(v, 0.85)) * vec3(0.98, 1.0, 0.99), 1.0);
+      return;
+    }
     float r2 = dot(d, d);
     vec2 off = d * r2 * uCA;
     vec3 col;
@@ -119,7 +133,7 @@ export class RenderPipeline {
       uniforms: {
         tColor: { value: null }, tBloom: { value: null }, uBloom: { value: 0 }, uExposure: { value: 1 },
         uTime: { value: 0 }, uVignette: { value: 0.32 }, uGrain: { value: 0.028 }, uDamage: { value: 0 },
-        uDesat: { value: 0 }, uFlash: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uCA: { value: 0.006 },
+        uDesat: { value: 0 }, uFlash: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) }, uCA: { value: 0.006 }, uThermal: { value: 0 },
       },
       vertexShader: QUAD_VERT, fragmentShader: FINAL_FRAG, depthTest: false, depthWrite: false,
     });
@@ -196,22 +210,27 @@ export class RenderPipeline {
   render(scene, camera, viewScene, viewCamera, dt) {
     const r = this.r;
     this.time += dt;
-    if (this.shadowEvery > 0 && this.frame % this.shadowEvery === 0) r.shadowMap.needsUpdate = true;
+    const thermal = this.thermal;
+    if (this.shadowEvery > 0 && this.frame % this.shadowEvery === 0 && !thermal) r.shadowMap.needsUpdate = true;
     this.frame++;
+    if (thermal) { thermal.begin(scene); viewScene = null; }
     if (!this.postEnabled) {
       r.toneMappingExposure = this.exposure;
       r.setRenderTarget(null);
       r.clear();
       r.render(scene, camera);
       if (viewScene) { r.clearDepth(); r.render(viewScene, viewCamera); }
+      if (thermal) thermal.end(scene);
       return;
     }
     r.setRenderTarget(this.rt);
     r.clear();
     r.render(scene, camera);
     if (viewScene) { r.clearDepth(); r.render(viewScene, viewCamera); }
+    if (thermal) thermal.end(scene);
     const u = this.finalMat.uniforms;
-    if (this.bloomEnabled && this.rtBright) {
+    u.uThermal.value = thermal ? 1 : 0;
+    if (this.bloomEnabled && this.rtBright && !thermal) {
       this.brightMat.uniforms.tColor.value = this.rt.texture;
       this.brightMat.uniforms.uTexel.value.set(1 / this.rt.width, 1 / this.rt.height);
       this.brightMat.uniforms.uExposure.value = this.exposure;

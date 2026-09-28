@@ -1,11 +1,13 @@
 // Offline cache: app shell is pre-cached, CDN modules (three.js) and fonts are cached on first use.
-const VERSION = 'greywater-v2';
+const VERSION = 'greywater-v3';
 const SHELL = [
   './', './index.html', './css/style.css', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png',
   './js/main.js', './js/game.js', './js/config.js', './js/util.js', './js/textures.js', './js/materials.js', './js/physics.js',
   './js/geometry.js', './js/builder.js', './js/props.js', './js/level.js', './js/sky.js', './js/renderer.js', './js/input.js',
   './js/player.js', './js/audio.js', './js/effects.js', './js/nav.js', './js/weaponModels.js', './js/viewmodel.js',
   './js/weapons.js', './js/enemyModel.js', './js/enemy.js', './js/hud.js',
+  './js/mountain.js', './js/mountainLayout.js', './js/terrain.js', './js/natureTextures.js', './js/natureMaterials.js',
+  './js/ballistics.js', './js/survival.js', './js/thermal.js', './js/helicopter.js', './js/vegetation.js',
 ];
 
 self.addEventListener('install', (e) => {

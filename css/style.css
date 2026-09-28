@@ -273,3 +273,73 @@ dl.keys dd { margin: 0; color: #cbc7bb; }
 @media (prefers-reduced-motion: reduce) {
   #hud-health.low #hp-value { animation: none; }
 }
+
+/* ------------------------------------------------------------------ Mountain Survival */
+.m-only { display: none !important; }
+body.mode-mountain #hud .m-only { display: block !important; }
+body.mode-mountain.touch #touch .m-only { display: flex !important; }
+body.mode-mountain #hud-objective { top: calc(64px + var(--sat)); }
+body.mode-mountain #obj-text { font-size: 15px; }
+
+#hud-timer { position: absolute; left: 50%; top: calc(14px + var(--sat)); transform: translateX(-50%); text-align: center; }
+#hud-timer .label { font-size: 10px; }
+#timer-val { font-size: 30px; font-weight: 600; letter-spacing: 0.08em; line-height: 1; font-variant-numeric: tabular-nums; }
+#hud-timer.urgent #timer-val { color: var(--accent); animation: pulse 1.2s infinite; }
+
+#hud-compass { position: absolute; left: 50%; top: calc(62px + var(--sat)); transform: translateX(-50%); width: 300px; height: 30px; }
+#hud-compass .cwin { position: absolute; inset: 0 0 12px 0; overflow: hidden; -webkit-mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent); }
+#compass-strip { position: absolute; left: 150px; top: 0; height: 18px; width: 2200px; }
+#compass-strip .cd { position: absolute; top: 2px; transform: translateX(-50%); font-size: 11px; color: var(--dim); letter-spacing: 0.05em; }
+#compass-strip .cd.major { color: var(--text); font-weight: 600; font-size: 13px; top: 0; }
+#hud-compass .needle { position: absolute; left: 50%; top: 16px; width: 0; height: 0; margin-left: -4px; border-left: 4px solid transparent; border-right: 4px solid transparent; border-bottom: 5px solid var(--accent); }
+#compass-deg { position: absolute; left: 50%; top: 21px; transform: translateX(-50%); font-size: 10px; letter-spacing: 0.16em; color: var(--accent); }
+
+#hud-team { position: absolute; left: calc(26px + var(--sal)); bottom: calc(92px + var(--sab)); font-size: 12px; letter-spacing: 0.1em; }
+#hud-team .tm { display: flex; align-items: center; gap: 8px; height: 18px; }
+#hud-team .tm i { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 1px rgba(0,0,0,0.5); }
+#hud-team .tm b { font-weight: 600; min-width: 64px; }
+#hud-team .tm span { color: var(--dim); font-size: 10px; letter-spacing: 0.18em; }
+#hud-team .st-c i { background: var(--accent); }
+#hud-team .st-w i { background: #d8a24a; }
+#hud-team .st-d i { background: #7d3b30; }
+#hud-team .st-d { opacity: 0.55; text-decoration: line-through; }
+
+#hud-med { position: absolute; left: calc(240px + var(--sal)); bottom: calc(26px + var(--sab)); min-width: 120px; }
+#hud-med .label b { color: var(--text); font-size: 18px; margin-left: 6px; letter-spacing: 0; }
+#med-bleed { display: none; font-size: 12px; letter-spacing: 0.16em; color: #d0624c; margin-top: 2px; animation: pulse 1s infinite; }
+#med-bleed.show { display: block; }
+#hud-med .prog { height: 3px; width: 120px; background: rgba(255,255,255,0.12); margin-top: 5px; opacity: 0; }
+#hud-med.active .prog { opacity: 1; }
+#med-fill { height: 100%; width: 0; background: #e6e1d4; }
+
+#radio-log { position: absolute; left: calc(26px + var(--sal)); top: calc(150px + var(--sat)); width: min(460px, 40vw); font-family: var(--body); font-size: 14px; line-height: 1.35; }
+#radio-log .rl { margin-bottom: 6px; padding: 4px 9px; background: rgba(8,9,10,0.42); border-left: 2px solid rgba(147,169,141,0.8); transition: opacity 0.3s; }
+#radio-log .rl b { font-family: var(--cond); letter-spacing: 0.14em; color: var(--ok); margin-right: 8px; font-size: 13px; }
+#wpn-keys { font-size: 10px; letter-spacing: 0.12em; color: var(--dim); margin-top: 6px; }
+#hud-weapon.item .ammo { display: none; }
+
+#optic { position: absolute; inset: 0; }
+#optic svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+#optic-info { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 22px; font-size: 13px; letter-spacing: 0.18em; color: rgba(230,226,215,0.9); white-space: nowrap; }
+#optic-info span:empty { display: none; }
+#optic.thermal #optic-info { color: rgba(240,240,240,0.95); }
+#optic.thermal #ret-binos { stroke: rgba(250,250,250,0.85); }
+
+.t-bino { right: calc(28% + var(--sar)); bottom: 62%; width: 54px; height: 54px; }
+.t-thermal { right: calc(36% + var(--sar)); bottom: 62%; width: 46px; height: 46px; font-family: var(--cond); font-weight: 700; font-size: 13px; letter-spacing: 0.1em; }
+.t-bandage { left: calc(4% + var(--sal)); top: 66%; width: 52px; height: 52px; }
+.t-prone { right: calc(24% + var(--sar)); bottom: calc(4% + var(--sab)); width: 54px; height: 54px; }
+.t-zin, .t-zout { right: calc(31% + var(--sar)); width: 44px; height: 44px; font-family: var(--cond); font-weight: 700; font-size: 22px; }
+.t-zin { bottom: 30%; } .t-zout { bottom: 20%; }
+body.touch #hud-team { bottom: auto; top: calc(8px + var(--sat)); left: calc(62px + var(--sal)); font-size: 10px; }
+body.touch #hud-team .tm { height: 15px; }
+body.touch.mode-mountain .t-reload { bottom: 58%; }
+body.touch.mode-mountain #wpn-mode { font-size: 10px; letter-spacing: 0.1em; }
+body.touch #hud-med { left: 50%; transform: translateX(-50%); bottom: calc(38px + var(--sab)); text-align: center; }
+body.touch #hud-med .prog { margin: 5px auto 0; }
+body.mode-mountain.touch #hud #wpn-keys { display: none !important; }
+body.mode-mountain.touch:not(.scoped) #touch .t-zin, body.mode-mountain.touch:not(.scoped) #touch .t-zout { display: none !important; }
+body.touch #radio-log { top: auto; bottom: calc(70px + var(--sab)); left: 50%; transform: translateX(-50%); font-size: 12px; width: min(420px, 60vw); }
+body.touch.mode-mountain #hud-objective { display: none; }
+body.touch #hud-compass { top: calc(60px + var(--sat)); width: 180px; }
+body.touch #compass-strip { left: 90px; }

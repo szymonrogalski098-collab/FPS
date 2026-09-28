@@ -9,8 +9,9 @@ const KEYMAP = {
   KeyQ: 'leanL', KeyE: 'leanR', KeyF: 'interact', Space: 'jump',
 };
 const TAPMAP = {
-  KeyR: 'reload', Digit1: 'weapon1', Digit2: 'weapon2', Digit3: 'weapon3', KeyB: 'firemode',
+  KeyR: 'reload', Digit1: 'weapon1', Digit2: 'weapon2', Digit3: 'weapon3', KeyV: 'firemode', KeyB: 'binoculars',
   KeyC: 'crouchToggle', Space: 'jump', KeyF: 'interactTap', KeyP: 'pause', Escape: 'pause',
+  KeyZ: 'prone', KeyT: 'thermal', KeyH: 'bandage', PageUp: 'zeroUp', PageDown: 'zeroDown', Equal: 'zoomIn', Minus: 'zoomOut',
 };
 
 export class Input {

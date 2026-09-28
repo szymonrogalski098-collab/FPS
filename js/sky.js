@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 
 const SKY_FRAG = `
-  uniform vec3 uSun; uniform float uTime; uniform float uCloudCover;
+  uniform vec3 uSun; uniform float uTime; uniform float uCloudCover; uniform vec3 uZenith; uniform vec3 uHorizon; uniform vec3 uGround; uniform float uCloudScale;
   varying vec3 vDir;
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
   float noise(vec2 p) {
@@ -18,9 +18,9 @@ const SKY_FRAG = `
   void main() {
     vec3 d = normalize(vDir);
     float h = d.y;
-    vec3 zenith = vec3(0.16, 0.24, 0.38);
-    vec3 horizon = vec3(0.62, 0.58, 0.52);
-    vec3 ground = vec3(0.23, 0.22, 0.2);
+    vec3 zenith = uZenith;
+    vec3 horizon = uHorizon;
+    vec3 ground = uGround;
     float sunAmt = max(dot(d, uSun), 0.0);
     vec3 col = mix(horizon, zenith, pow(smoothstep(0.0, 0.55, h), 0.7));
     col += vec3(1.0, 0.62, 0.32) * pow(sunAmt, 6.0) * 0.55 * (1.0 - smoothstep(0.0, 0.5, h));
@@ -28,7 +28,7 @@ const SKY_FRAG = `
     col += vec3(1.0, 0.9, 0.75) * smoothstep(0.9993, 0.99965, sunAmt) * 22.0;
     // clouds on a virtual plane
     if (h > 0.0) {
-      vec2 cp = d.xz / (h + 0.12) * 1.6 + vec2(uTime * 0.004, uTime * 0.0015);
+      vec2 cp = d.xz / (h + 0.12) * uCloudScale + vec2(uTime * 0.004, uTime * 0.0015);
       float n = fbm(cp);
       float c = smoothstep(1.0 - uCloudCover, 1.0 - uCloudCover + 0.32, n);
       float lit = pow(sunAmt, 3.0);
@@ -52,9 +52,15 @@ const SKY_VERT = `
   }
 `;
 
-export function createSkyMaterial(sunDir) {
+export const SKY_DEPOT = { zenith: [0.16, 0.24, 0.38], horizon: [0.62, 0.58, 0.52], ground: [0.23, 0.22, 0.2], cloudCover: 0.46, cloudScale: 1.6, envGround: 0x3b3833 };
+
+export function createSkyMaterial(sunDir, p = SKY_DEPOT) {
   return new THREE.ShaderMaterial({
-    uniforms: { uSun: { value: sunDir.clone() }, uTime: { value: 0 }, uCloudCover: { value: 0.46 } },
+    uniforms: {
+      uSun: { value: sunDir.clone() }, uTime: { value: 0 }, uCloudCover: { value: p.cloudCover },
+      uZenith: { value: new THREE.Vector3(...p.zenith) }, uHorizon: { value: new THREE.Vector3(...p.horizon) },
+      uGround: { value: new THREE.Vector3(...p.ground) }, uCloudScale: { value: p.cloudScale },
+    },
     vertexShader: SKY_VERT,
     fragmentShader: SKY_FRAG,
     side: THREE.BackSide,
@@ -63,22 +69,24 @@ export function createSkyMaterial(sunDir) {
   });
 }
 
-export function createSky(scene, sunDir) {
-  const mat = createSkyMaterial(sunDir);
+export function createSky(scene, sunDir, p = SKY_DEPOT) {
+  const mat = createSkyMaterial(sunDir, p);
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(400, 32, 16), mat);
   mesh.frustumCulled = false;
   mesh.renderOrder = -10;
+  // keep the dome centred on the viewer (large maps would otherwise walk out of it)
+  mesh.onBeforeRender = (r, s, cam) => { mesh.position.copy(cam.position); mesh.updateMatrixWorld(); };
   scene.add(mesh);
   return mesh;
 }
 
 /** Bakes the sky (plus a dark ground plane and a few silhouettes) into a PMREM env map. */
-export function createEnvironment(renderer, sunDir) {
+export function createEnvironment(renderer, sunDir, p = SKY_DEPOT) {
   const env = new THREE.Scene();
-  const mat = createSkyMaterial(sunDir);
-  mat.uniforms.uCloudCover.value = 0.4;
+  const mat = createSkyMaterial(sunDir, p);
+  mat.uniforms.uCloudCover.value = Math.min(0.4, p.cloudCover);
   env.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), mat));
-  const ground = new THREE.Mesh(new THREE.CircleGeometry(49, 24), new THREE.MeshBasicMaterial({ color: 0x3b3833 }));
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(49, 24), new THREE.MeshBasicMaterial({ color: p.envGround }));
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -1.6;
   env.add(ground);

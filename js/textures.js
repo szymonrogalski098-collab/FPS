@@ -23,7 +23,7 @@ function valueNoise(S, freq, rng) {
   return out;
 }
 
-function fbmField(S, baseFreq, octaves, gain, rng) {
+export function fbmField(S, baseFreq, octaves, gain, rng) {
   const out = new Float32Array(S * S);
   let amp = 1, f = baseFreq;
   for (let o = 0; o < octaves && f <= S; o++) {
@@ -39,7 +39,7 @@ function fbmField(S, baseFreq, octaves, gain, rng) {
   return out;
 }
 
-function dataTexture(bytes, w, h, srgb, wrap = true) {
+export function dataTexture(bytes, w, h, srgb, wrap = true) {
   const t = new THREE.DataTexture(new Uint8Array(bytes.buffer), w, h, THREE.RGBAFormat);
   t.wrapS = t.wrapT = wrap ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
   t.magFilter = THREE.LinearFilter;

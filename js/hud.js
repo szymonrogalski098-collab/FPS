@@ -21,6 +21,15 @@ export class HUD {
     this.hitT = 0;
     this.mm = this.el.minimap.getContext('2d');
     this.mapImg = null;
+    this.m = {
+      timer: $('timer-val'), timerBox: $('hud-timer'), team: $('hud-team'), med: $('med-val'), medBox: $('hud-med'), medFill: $('med-fill'),
+      bleed: $('med-bleed'), compass: $('compass-strip'), heading: $('compass-deg'), radio: $('radio-log'),
+      optic: $('optic'), opticSvg: $('optic-svg'), maskPath: $('optic-mask'), ring: $('optic-ring'), reticles: $('optic-reticles'),
+      ret: { mil: $('ret-mil'), chevron: $('ret-chevron'), binos: $('ret-binos') },
+      opticInfo: $('optic-info'), oZoom: $('o-zoom'), oZero: $('o-zero'), oRange: $('o-range'), oHead: $('o-head'),
+    };
+    this.radioLines = [];
+    this.buildCompass();
   }
 
   show(v) { this.el.root.classList.toggle('hidden', !v); }
@@ -41,11 +50,17 @@ export class HUD {
     this.el.health.classList.toggle('low', h <= 30);
   }
 
-  setWeapon(def, st) {
+  setWeapon(def, st, W) {
     this.set('wname', this.el.wpnName, def.name);
-    this.set('mag', this.el.mag, String(st.mag));
-    this.set('res', this.el.res, String(st.reserve));
-    this.set('mode', this.el.mode, def.auto ? (st.mode === 'auto' ? 'AUTO' : 'SEMI') : def.id === 'shotgun' ? 'PUMP' : 'SEMI');
+    const item = !!def.item;
+    this.el.wpn.classList.toggle('item', item);
+    this.set('mag', this.el.mag, item ? '' : String(st.mag));
+    this.set('res', this.el.res, item ? '' : String(st.reserve));
+    let mode = def.auto ? (st.mode === 'auto' ? 'AUTO' : 'SEMI') : def.id === 'shotgun' ? 'PUMP' : def.bolt ? 'BOLT' : 'SEMI';
+    if (def.scope && W) mode += ` · ${W.scopeZoom[def.id]}× · ${W.zero[def.id]} m`;
+    if (def.id === 'binos' && W) mode = W.thermalOn ? 'THERMAL · LRF' : 'DAY · LRF';
+    if (def.id === 'bandage' && W) mode = `${W.bandages} LEFT`;
+    this.set('mode', this.el.mode, mode);
     const low = st.mag <= Math.ceil(def.mag * 0.25);
     const key = `${st.mag === 0}|${low}`;
     if (this.cache.ammoState !== key) {
@@ -53,9 +68,10 @@ export class HUD {
       this.el.wpn.classList.toggle('empty', st.mag === 0);
       this.el.wpn.classList.toggle('low', low && st.mag > 0);
     }
-    if (this.cache.slot !== def.slot) {
-      this.cache.slot = def.slot;
-      this.el.slots.querySelectorAll('span').forEach((s) => s.classList.toggle('on', Number(s.dataset.slot) === def.slot));
+    const slot = W && W.order ? W.order.indexOf(def.id) + 1 : def.slot;
+    if (this.cache.slot !== slot) {
+      this.cache.slot = slot;
+      this.el.slots.querySelectorAll('span').forEach((s) => s.classList.toggle('on', Number(s.dataset.slot) === slot));
     }
   }
 
@@ -142,20 +158,30 @@ export class HUD {
     this.mapBounds = bounds;
   }
 
-  updateMinimap(player, objective, dt) {
+  updateMinimap(player, objective, dt, mates) {
     const ctx = this.mm, cv = this.el.minimap, R = cv.width / 2;
     ctx.clearRect(0, 0, cv.width, cv.height);
     if (!this.mapImg) return;
-    const S = this.mapScale * 0.85, b = this.mapBounds;
+    const zoomK = this.mapTopo ? 1.6 : 0.85;
+    const S = this.mapScale * zoomK, b = this.mapBounds;
     ctx.save();
     ctx.beginPath();
     ctx.arc(R, R, R - 1, 0, Math.PI * 2);
     ctx.clip();
     ctx.translate(R, R);
     ctx.rotate(player.yaw);
-    ctx.scale(0.85, 0.85);
+    ctx.scale(zoomK, zoomK);
     ctx.drawImage(this.mapImg, -(player.pos.x - b.minX) * this.mapScale, -(player.pos.z - b.minZ) * this.mapScale);
-    ctx.scale(1 / 0.85, 1 / 0.85);
+    ctx.scale(1 / zoomK, 1 / zoomK);
+    if (mates) {
+      for (const m of mates) {
+        if (!m.alive) continue;
+        ctx.fillStyle = 'rgba(150,200,140,0.95)';
+        ctx.beginPath();
+        ctx.arc((m.pos.x - player.pos.x) * S, (m.pos.z - player.pos.z) * S, 2.6, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
     // gunfire pings
     for (let i = this.pings.length - 1; i >= 0; i--) {
       const p = this.pings[i];
@@ -225,14 +251,167 @@ export class HUD {
     this.dmgLevel = Math.max(0, (this.dmgLevel || 0) - dt * 0.9);
     this.set('dmg', this.el.dmgOverlay.style, this.dmgLevel.toFixed(2), 'opacity');
     if (fps !== null) this.set('fps', this.el.fps, fps);
+    this.updateRadio(dt);
   }
 
   reset() {
     this.cache = {};
+    if (this.m) { this.m.optic.classList.add('hidden'); this.m.radio.innerHTML = ''; this.radioLines = []; }
     this.pings.length = 0;
     this.dmgLevel = 0;
     this.el.notice.classList.remove('show');
     this.el.dmgDirs.innerHTML = '';
     this.interact(false);
+  }
+
+  // ------------------------------------------------------------------ modes & maps
+
+  setMode(mode) {
+    document.body.classList.toggle('mode-mountain', mode === 'mountain');
+    this.mode = mode;
+    this.m.radio.innerHTML = '';
+    this.radioLines = [];
+    this.cache.timer = this.cache.team = this.cache.med = this.cache.oType = null;
+  }
+
+  currentMap() { return { img: this.mapImg, scale: this.mapScale, bounds: this.mapBounds }; }
+
+  useMap(m) {
+    this.mapImg = m.img;
+    this.mapScale = m.scale;
+    this.mapBounds = m.bounds;
+    this.mapTopo = !!m.topo;
+  }
+
+  // ------------------------------------------------------------------ survival panels
+
+  timer(sec) {
+    const s = Math.ceil(sec);
+    if (this.cache.timer === s) return;
+    this.cache.timer = s;
+    const m = Math.floor(s / 60), r = s % 60;
+    this.m.timer.textContent = `${m}:${String(r).padStart(2, '0')}`;
+    this.m.timerBox.classList.toggle('urgent', s <= 60);
+  }
+
+  team(list) {
+    if (!list) return;
+    const key = list.map((m) => (m.alive ? (m.health < m.profile.hp * 0.5 ? 'w' : m.state === 'combat' ? 'c' : 'o') : 'd')).join('');
+    if (this.cache.team === key) return;
+    this.cache.team = key;
+    this.m.team.innerHTML = list.map((m, i) => {
+      const st = key[i];
+      const label = st === 'd' ? 'DOWN' : st === 'w' ? 'WOUNDED' : st === 'c' ? 'ENGAGED' : 'OK';
+      return `<div class="tm st-${st}"><i></i><b>${m.def.short}</b><span>${label}</span></div>`;
+    }).join('');
+  }
+
+  bandage(count, progress, bleeding) {
+    const key = `${count}|${bleeding}|${progress >= 0 ? Math.round(progress * 50) : -1}`;
+    if (this.cache.med === key) return;
+    this.cache.med = key;
+    this.m.med.textContent = String(count);
+    this.m.bleed.classList.toggle('show', !!bleeding);
+    this.m.medBox.classList.toggle('active', progress >= 0);
+    this.m.medFill.style.width = `${Math.max(0, progress) * 100}%`;
+  }
+
+  compass(yaw) {
+    const deg = ((-yaw * 180) / Math.PI % 360 + 360) % 360;
+    const px = Math.round(deg * 3 * 10) / 10;
+    if (this.cache.compass === px) return;
+    this.cache.compass = px;
+    this.m.compass.style.transform = `translateX(${-px - 180 * 3}px)`;
+    this.m.heading.textContent = String(Math.round(deg) % 360).padStart(3, '0');
+  }
+
+  buildCompass() {
+    const names = { 0: 'N', 45: 'NE', 90: 'E', 135: 'SE', 180: 'S', 225: 'SW', 270: 'W', 315: 'NW' };
+    let html = '';
+    for (let d = -180; d <= 540; d += 15) {
+      const n = ((d % 360) + 360) % 360;
+      const x = (d + 180) * 3;
+      html += names[n] ? `<span class="cd major" style="left:${x}px">${names[n]}</span>` : `<span class="cd" style="left:${x}px">${n % 45 === 0 ? '' : '·'}</span>`;
+    }
+    this.m.compass.innerHTML = html;
+  }
+
+  radio(who, text) {
+    const d = document.createElement('div');
+    d.className = 'rl';
+    d.innerHTML = `<b>${who}</b>${text}`;
+    this.m.radio.appendChild(d);
+    this.radioLines.push({ el: d, t: 7 + text.length * 0.03 });
+    while (this.radioLines.length > 4) { const r = this.radioLines.shift(); r.el.remove(); }
+  }
+
+  updateRadio(dt) {
+    if (!this.radioLines) return;
+    for (let i = this.radioLines.length - 1; i >= 0; i--) {
+      const r = this.radioLines[i];
+      r.t -= dt;
+      if (r.t < 0.6) r.el.style.opacity = String(Math.max(0, r.t / 0.6));
+      if (r.t <= 0) { r.el.remove(); this.radioLines.splice(i, 1); }
+    }
+  }
+
+  // ------------------------------------------------------------------ optics overlay
+
+  layoutOptic(type) {
+    const w = window.innerWidth, h = window.innerHeight, cx = w / 2, cy = h / 2;
+    const svg = this.m.opticSvg;
+    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+    const R = Math.min(w, h) * (type === 'binos' ? 0.4 : 0.46);
+    const circ = (x, r) => `M${x - r},${cy} a${r},${r} 0 1,0 ${2 * r},0 a${r},${r} 0 1,0 ${-2 * r},0 Z`;
+    let d = `M0,0 H${w} V${h} H0 Z `;
+    if (type === 'binos') {
+      const off = R * 0.52;
+      // union of two circles, drawn as one outline so the overlap stays clear
+      const a = Math.acos(off / R);
+      const yT = cy - R * Math.sin(a), yB = cy + R * Math.sin(a);
+      d += `M${cx},${yT} A${R},${R} 0 1,0 ${cx},${yB} A${R},${R} 0 1,0 ${cx},${yT} Z`;
+      this.m.ring.setAttribute('cx', cx); this.m.ring.setAttribute('cy', cy); this.m.ring.setAttribute('r', R * 1.5);
+    } else {
+      d += circ(cx, R);
+      this.m.ring.setAttribute('cx', cx); this.m.ring.setAttribute('cy', cy); this.m.ring.setAttribute('r', R);
+    }
+    this.m.maskPath.setAttribute('d', d);
+    this.m.reticles.setAttribute('transform', `translate(${cx},${cy}) scale(${R / 300})`);
+    this.m.opticInfo.style.bottom = `${Math.max(12, cy - R * 0.92)}px`;
+    this.opticR = R;
+    this.opticW = w; this.opticH = h;
+  }
+
+  optic(W, camera, game) {
+    const o = W.optic;
+    const show = o > 0.01 && game.player.alive;
+    const scoped = o > 0.5 && W.def.scope && W.def.scope.step > 0;
+    if (this.cache.scoped !== scoped) { this.cache.scoped = scoped; document.body.classList.toggle('scoped', !!scoped); }
+    if (!show) {
+      if (this.cache.opticOn !== false) { this.cache.opticOn = false; this.m.optic.classList.add('hidden'); }
+      return;
+    }
+    if (this.cache.opticOn !== true) { this.cache.opticOn = true; this.m.optic.classList.remove('hidden'); }
+    this.set('opticO', this.m.optic.style, o.toFixed(2), 'opacity');
+    const binos = W.currentId === 'binos';
+    const type = binos ? 'binos' : (W.def.scope && W.def.scope.reticle) || 'mil';
+    if (this.cache.oType !== type || this.opticW !== window.innerWidth || this.opticH !== window.innerHeight) {
+      this.cache.oType = type;
+      this.layoutOptic(type);
+      for (const [k, el] of Object.entries(this.m.ret)) el.style.display = k === type ? '' : 'none';
+    }
+    const z = W.zoom();
+    this.set('oZoom', this.m.oZoom, `${z.toFixed(1)}×`);
+    this.set('oZero', this.m.oZero, binos ? (W.thermalOn ? 'THERMAL · WHT' : 'DAY') : `ZERO ${W.zero[W.currentId]} m`);
+    if (binos) {
+      const r = W.range;
+      this.set('oRange', this.m.oRange, r ? `${String(Math.round(r)).padStart(4, '0')} m` : '---- m');
+      const deg = ((-game.player.yaw * 180) / Math.PI % 360 + 360) % 360;
+      this.set('oHead', this.m.oHead, `AZ ${String(Math.round(deg) % 360).padStart(3, '0')}°  EL ${(game.player.pitch * 57.3).toFixed(1)}°`);
+    } else {
+      this.set('oRange', this.m.oRange, W.holding ? `HOLD ${Math.max(0, 6 - W.breathHold).toFixed(1)}s` : W.gaspT > 0 ? 'BREATHE' : '');
+      this.set('oHead', this.m.oHead, '');
+    }
+    this.m.optic.classList.toggle('thermal', binos && W.thermalOn);
   }
 }

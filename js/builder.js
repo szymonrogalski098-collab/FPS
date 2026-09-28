@@ -114,10 +114,10 @@ export class LevelBuilder {
   }
 
   doorFrame(axis, c, thick, o) {
-    const M = this.M, fw = 0.06, ext = thick / 2 + 0.015;
+    const M = this.M, fw = 0.06, ext = thick / 2 + 0.015, mat = o.frameMat || M.steelDark;
     const box = (a0, y0, a1, y1) => {
-      if (axis === 'x') this.vis(a0, y0, c - ext, a1, y1, c + ext, M.steelDark, { ao: false });
-      else this.vis(c - ext, y0, a0, c + ext, y1, a1, M.steelDark, { ao: false });
+      if (axis === 'x') this.vis(a0, y0, c - ext, a1, y1, c + ext, mat, { ao: false });
+      else this.vis(c - ext, y0, a0, c + ext, y1, a1, mat, { ao: false });
     };
     box(o.a - fw, o.bottom, o.a, o.top + fw);
     box(o.b, o.bottom, o.b + fw, o.top + fw);

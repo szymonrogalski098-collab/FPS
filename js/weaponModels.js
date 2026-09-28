@@ -31,6 +31,11 @@ export function createWeaponMaterials(T) {
   M.sleeve = new THREE.MeshStandardMaterial({ color: 0x474c3d, roughness: 1, map: tex(T.fabric.map, 5), normalMap: tex(T.fabric.normalMap, 5) });
   M.glove = new THREE.MeshStandardMaterial({ color: 0x2a2622, roughness: 0.86, normalMap: tex(T.fabric.normalMap, 12), normalScale: new THREE.Vector2(0.6, 0.6) });
   M.watch = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.2 });
+  M.tan = new THREE.MeshStandardMaterial({ color: 0x9a8a6a, metalness: 0, roughness: 0.72, normalMap: tex(T.fabric.normalMap, 8), normalScale: new THREE.Vector2(0.5, 0.5) });
+  M.odGreen = new THREE.MeshStandardMaterial({ color: 0x4a4d3a, metalness: 0, roughness: 0.8, normalMap: tex(T.fabric.normalMap, 14), normalScale: new THREE.Vector2(0.7, 0.7) });
+  M.scopeBody = new THREE.MeshStandardMaterial({ color: 0x1e1f20, metalness: 0.6, roughness: 0.45, roughnessMap: tex(T.bare.roughMap, 2) });
+  M.gauze = new THREE.MeshStandardMaterial({ color: 0xe6e1d4, roughness: 0.95, metalness: 0, normalMap: tex(T.fabric.normalMap, 18), normalScale: new THREE.Vector2(0.8, 0.8) });
+  M.pouch = new THREE.MeshStandardMaterial({ color: 0x5a5a45, roughness: 0.9, metalness: 0, map: tex(T.fabric.map, 6) });
   return M;
 }
 
@@ -309,9 +314,209 @@ export function poseArm(arm, hand, elbow, handRot) {
   arm.hand.rotation.copy(handRot);
 }
 
-// ------------------------------------------------------------------ enemy rifle (single mesh)
+// ------------------------------------------------------------------ bolt-action sniper rifle
 
-export function buildEnemyRifleGeometry() {
+function scopeTube(a, M, y, z0, z1, rTube, rObj, rOcu) {
+  const len = z1 - z0;
+  a.cylZ(rTube, len, M.scopeBody, 0, y, (z0 + z1) / 2, 20);
+  a.cylZ(rTube, 0.045, M.scopeBody, 0, y, z0 - 0.022, 20, rObj);
+  a.cylZ(rObj, 0.06, M.scopeBody, 0, y, z0 - 0.075, 22);
+  a.cylZ(rObj + 0.0015, 0.008, M.rubber, 0, y, z0 - 0.105, 22);
+  a.cylZ(rOcu, 0.05, M.scopeBody, 0, y, z1 + 0.03, 18, rTube);
+  a.cylZ(rOcu + 0.001, 0.028, M.rubber, 0, y, z1 + 0.068, 18);
+}
+
+function lensDisc(M, r, x, y, z, back) {
+  const m = new THREE.Mesh(new THREE.CircleGeometry(r, 24), M.lens);
+  m.position.set(x, y, z);
+  if (back) m.rotation.y = PI;
+  m.renderOrder = 5;
+  return m;
+}
+
+export function buildSniper(M) {
+  const root = new THREE.Group();
+  const a = new Assembler();
+  // chassis stock: forend, action bed, vertical grip, adjustable butt
+  a.box(0.052, 0.046, 0.38, M.odGreen, 0, 0.02, -0.26);
+  a.box(0.05, 0.058, 0.17, M.odGreen, 0, 0.022, -0.015);
+  a.box(0.033, 0.11, 0.05, M.odGreen, 0, -0.05, 0.036, -0.32, 0, 0);
+  a.box(0.042, 0.07, 0.2, M.odGreen, 0, 0.016, 0.175, 0.05, 0, 0);
+  a.box(0.036, 0.028, 0.12, M.odGreen, 0, 0.064, 0.15);
+  a.box(0.046, 0.125, 0.022, M.rubber, 0, 0.004, 0.285, 0.05, 0, 0);
+  a.box(0.03, 0.034, 0.07, M.odGreen, 0, -0.04, 0.2, 0.35, 0, 0);
+  for (let z = -0.42; z < -0.12; z += 0.05) a.box(0.054, 0.004, 0.022, M.rubber, 0, 0.0, z);
+  // trigger group
+  a.box(0.006, 0.004, 0.062, M.metal, 0, -0.022, -0.005);
+  a.box(0.004, 0.02, 0.006, M.metalWorn, 0, -0.012, -0.004, 0.25, 0, 0);
+  // round receiver + barrel + brake
+  a.cylZ(0.017, 0.2, M.metal, 0, 0.052, -0.035, 16);
+  a.box(0.002, 0.016, 0.06, M.rubber, 0.0172, 0.058, -0.02);
+  a.cylZ(0.0118, 0.6, M.metal, 0, 0.05, -0.44, 14, 0.0092);
+  a.cylZ(0.0155, 0.075, M.metal, 0, 0.05, -0.775, 12);
+  for (const s2 of [-1, 1]) a.box(0.004, 0.012, 0.012, M.rubber, s2 * 0.0145, 0.05, -0.765);
+  // folded bipod
+  for (const s2 of [-1, 1]) a.cylZ(0.0045, 0.19, M.metal, s2 * 0.011, -0.012, -0.34, 6);
+  a.box(0.042, 0.02, 0.028, M.metal, 0, -0.002, -0.43);
+  // optic: rail, rings, 4-12x tube with turrets
+  a.box(0.024, 0.012, 0.22, M.metal, 0, 0.074, -0.03);
+  for (const z of [-0.105, 0.035]) {
+    a.add(propCylinder(0.02, 0.02, 0.018, 18), M.metal, 0, 0.106, z, PI / 2, 0, 0);
+    a.box(0.026, 0.024, 0.018, M.metal, 0, 0.086, z);
+  }
+  scopeTube(a, M, 0.106, -0.17, 0.09, 0.0155, 0.027, 0.02);
+  a.add(propCylinder(0.0125, 0.0125, 0.026, 16), M.metalWorn, 0, 0.134, -0.04);
+  a.add(propCylinder(0.0125, 0.0125, 0.026, 16), M.metalWorn, 0.029, 0.106, -0.04, 0, 0, PI / 2);
+  a.add(propCylinder(0.009, 0.009, 0.02, 12), M.metalWorn, -0.026, 0.106, -0.02, 0, 0, PI / 2);
+  root.add(a.build());
+  root.add(lensDisc(M, 0.025, 0, 0.106, -0.3, false));
+  root.add(lensDisc(M, 0.018, 0, 0.106, 0.183, true));
+  // bolt (rotates up, draws back)
+  const bolt = new THREE.Group();
+  bolt.position.set(0, 0.052, 0.04);
+  const ba = new Assembler();
+  ba.cylZ(0.0125, 0.05, M.metalWorn, 0, 0, 0.012, 14);
+  ba.add(propCylinder(0.0042, 0.0042, 0.048, 8), M.metal, 0.024, -0.012, 0.02, 0, 0, PI / 2 + 0.45);
+  ba.add(new THREE.SphereGeometry(0.0088, 12, 10), M.metal, 0.046, -0.024, 0.02);
+  bolt.add(ba.build());
+  root.add(bolt);
+  // detachable box magazine
+  const mag = new THREE.Group();
+  mag.position.set(0, -0.012, -0.055);
+  const ma = new Assembler();
+  ma.box(0.03, 0.068, 0.078, M.polymer, 0, -0.03, 0);
+  ma.box(0.034, 0.012, 0.082, M.polymer, 0, -0.066, 0);
+  ma.box(0.012, 0.006, 0.05, M.brass, 0, 0.006, 0.004);
+  mag.add(ma.build());
+  root.add(mag);
+  return {
+    id: 'sniper', group: root, parts: { mag, bolt },
+    magRest: mag.position.clone(), boltRest: bolt.position.clone(), rifleLike: true, magDrop: 0.3,
+    muzzle: new THREE.Vector3(0, 0.05, -0.82), eject: new THREE.Vector3(0.022, 0.058, -0.02),
+    sight: new THREE.Vector3(0, 0.106, 0.185), adsDist: 0.09,
+    hip: new THREE.Vector3(0.13, -0.18, -0.25),
+    rightHand: new THREE.Vector3(0, -0.048, 0.042), rightElbow: new THREE.Vector3(0.1, -0.23, 0.32),
+    leftHand: new THREE.Vector3(-0.004, -0.004, -0.31), leftElbow: new THREE.Vector3(-0.17, -0.22, -0.09),
+    rightHandRot: new THREE.Euler(-0.32, 0, 0), leftHandRot: new THREE.Euler(0.1, 0, 0.35),
+    boltKnob: new THREE.Vector3(0.046, 0.028, 0.06),
+  };
+}
+
+// ------------------------------------------------------------------ 7.62 designated marksman rifle
+
+export function buildDmr(M) {
+  const root = new THREE.Group();
+  const a = new Assembler();
+  a.box(0.032, 0.046, 0.17, M.metal, 0, 0.002, -0.04);
+  a.box(0.035, 0.054, 0.23, M.metal, 0, 0.047, -0.04);
+  a.box(0.038, 0.056, 0.085, M.metal, 0, -0.03, -0.075);
+  a.box(0.002, 0.02, 0.055, M.rubber, 0.0182, 0.05, -0.03);
+  a.box(0.029, 0.105, 0.043, M.tan, 0, -0.058, 0.03, -0.3, 0, 0);
+  a.box(0.006, 0.004, 0.07, M.metal, 0, -0.035, -0.015);
+  a.box(0.004, 0.02, 0.006, M.metalWorn, 0, -0.022, -0.012, 0.25, 0, 0);
+  a.add(propCylinder(0.028, 0.028, 0.34, 8), M.tan, 0, 0.044, -0.33, PI / 2, PI / 8, 0);
+  for (const s2 of [-1, 1]) for (let z = -0.46; z < -0.2; z += 0.05) a.box(0.004, 0.013, 0.026, M.rubber, s2 * 0.027, 0.044, z);
+  a.box(0.022, 0.009, 0.5, M.metal, 0, 0.077, -0.22);
+  railTeeth(a, M.metal, 0.083, -0.46, 0.02);
+  a.cylZ(0.0085, 0.24, M.metal, 0, 0.044, -0.62, 10);
+  a.cylZ(0.013, 0.06, M.metal, 0, 0.044, -0.76, 10);
+  a.cylZ(0.0145, 0.17, M.metal, 0, 0.042, 0.145, 12);
+  a.box(0.042, 0.078, 0.16, M.tan, 0, 0.028, 0.205);
+  a.box(0.036, 0.03, 0.1, M.tan, 0, 0.074, 0.19);
+  a.box(0.044, 0.108, 0.018, M.rubber, 0, 0.02, 0.29);
+  // fixed 4x prism scope on a cantilever mount
+  a.box(0.026, 0.018, 0.1, M.metal, 0, 0.096, -0.06);
+  for (const z of [-0.09, -0.03]) a.add(propCylinder(0.02, 0.02, 0.016, 16), M.metal, 0, 0.122, z, PI / 2, 0, 0);
+  scopeTube(a, M, 0.122, -0.12, 0.0, 0.017, 0.024, 0.019);
+  a.box(0.018, 0.012, 0.03, M.metalWorn, 0, 0.143, -0.06);
+  root.add(a.build());
+  root.add(lensDisc(M, 0.022, 0, 0.122, -0.235, false));
+  root.add(lensDisc(M, 0.017, 0, 0.122, 0.093, true));
+  const mag = new THREE.Group();
+  mag.position.set(0, -0.048, -0.075);
+  mag.rotation.x = 0.1;
+  const ma = new Assembler();
+  ma.box(0.028, 0.17, 0.08, M.polymer, 0, -0.085, 0);
+  ma.box(0.032, 0.016, 0.084, M.polymer, 0, -0.172, 0.002);
+  ma.box(0.014, 0.006, 0.06, M.brass, 0, 0.002, 0.004);
+  mag.add(ma.build());
+  root.add(mag);
+  const ch = new THREE.Group();
+  ch.position.set(0, 0.07, 0.075);
+  const ca = new Assembler();
+  ca.box(0.046, 0.008, 0.016, M.metal, 0, 0, 0.004);
+  ca.box(0.012, 0.007, 0.04, M.metal, 0, 0, -0.02);
+  ch.add(ca.build());
+  root.add(ch);
+  return {
+    id: 'dmr', group: root, parts: { mag, charging: ch },
+    magRest: mag.position.clone(), chRest: ch.position.clone(), rifleLike: true, magDrop: 0.42,
+    muzzle: new THREE.Vector3(0, 0.044, -0.8), eject: new THREE.Vector3(0.022, 0.05, -0.03),
+    sight: new THREE.Vector3(0, 0.122, 0.095), adsDist: 0.1,
+    hip: new THREE.Vector3(0.135, -0.176, -0.28),
+    rightHand: new THREE.Vector3(0, -0.045, 0.03), rightElbow: new THREE.Vector3(0.1, -0.23, 0.3),
+    leftHand: new THREE.Vector3(-0.003, 0.012, -0.34), leftElbow: new THREE.Vector3(-0.17, -0.22, -0.1),
+    rightHandRot: new THREE.Euler(-0.3, 0, 0), leftHandRot: new THREE.Euler(0.1, 0, 0.35),
+  };
+}
+
+// ------------------------------------------------------------------ binoculars & field dressing
+
+export function buildBinoculars(M) {
+  const root = new THREE.Group();
+  const a = new Assembler();
+  for (const s2 of [-1, 1]) {
+    a.cylZ(0.029, 0.12, M.odGreen, s2 * 0.035, 0, -0.075, 20);
+    a.cylZ(0.031, 0.022, M.rubber, s2 * 0.035, 0, -0.145, 20);
+    a.cylZ(0.021, 0.035, M.rubber, s2 * 0.033, 0.002, -0.0, 18, 0.024);
+  }
+  a.box(0.03, 0.022, 0.07, M.odGreen, 0, 0.008, -0.07);
+  a.box(0.034, 0.02, 0.06, M.polymer, 0, 0.033, -0.075);
+  a.box(0.008, 0.005, 0.01, M.metalWorn, -0.008, 0.045, -0.06);
+  a.box(0.008, 0.005, 0.01, M.metalWorn, 0.008, 0.045, -0.06);
+  root.add(a.build());
+  for (const s2 of [-1, 1]) root.add(lensDisc(M, 0.026, s2 * 0.035, 0, -0.157, false));
+  return {
+    id: 'binos', group: root, parts: {},
+    muzzle: new THREE.Vector3(0, 0, -0.16), eject: new THREE.Vector3(0, 0, 0),
+    sight: new THREE.Vector3(0, 0.002, 0.02), adsDist: 0.02,
+    hip: new THREE.Vector3(0.0, -0.13, -0.26),
+    rightHand: new THREE.Vector3(0.05, -0.022, -0.075), rightElbow: new THREE.Vector3(0.2, -0.24, 0.1),
+    leftHand: new THREE.Vector3(-0.05, -0.022, -0.075), leftElbow: new THREE.Vector3(-0.2, -0.24, 0.1),
+    rightHandRot: new THREE.Euler(0.1, 0.2, -1.35), leftHandRot: new THREE.Euler(0.1, -0.2, 1.35),
+  };
+}
+
+export function buildBandage(M) {
+  const root = new THREE.Group();
+  const roll = new THREE.Group();
+  const ra = new Assembler();
+  ra.add(propCylinder(0.022, 0.022, 0.07, 16), M.gauze, 0, 0, 0, 0, 0, PI / 2);
+  ra.add(propCylinder(0.008, 0.008, 0.072, 10), M.watch, 0, 0, 0, 0, 0, PI / 2);
+  roll.add(ra.build());
+  root.add(roll);
+  const wrap = new THREE.Mesh(propCylinder(0.05, 0.05, 0.1, 18, true), M.gauze);
+  wrap.frustumCulled = false;
+  root.add(wrap);
+  const pk = new Assembler();
+  pk.box(0.07, 0.012, 0.11, M.pouch, 0, 0, 0);
+  const pack = pk.build();
+  root.add(pack);
+  return {
+    id: 'bandage', group: root, parts: { roll, wrap, pack },
+    muzzle: new THREE.Vector3(0, 0, -0.2), eject: new THREE.Vector3(0, 0, 0),
+    sight: new THREE.Vector3(0, 0, 0), adsDist: 0.3,
+    hip: new THREE.Vector3(0.0, -0.2, -0.3),
+    rightHand: new THREE.Vector3(0.06, 0.02, -0.02), rightElbow: new THREE.Vector3(0.22, -0.2, 0.25),
+    leftHand: new THREE.Vector3(-0.02, 0.02, -0.14), leftElbow: new THREE.Vector3(-0.22, -0.16, 0.12),
+    rightHandRot: new THREE.Euler(0.2, 0, -0.6), leftHandRot: new THREE.Euler(0.4, 0.3, 1.5),
+  };
+}
+
+// ------------------------------------------------------------------ enemy / squad rifles (single mesh)
+
+/** kind: 'm4' (depot and squad carbine), 'ak', 'svd', 'dmr'. Returns { geometry, muzzle }. */
+export function buildEnemyRifleGeometry(kind = 'm4') {
   const parts = [];
   const add = (g, x, y, z, rx = 0, col = 0x262728) => {
     g.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, 0, 0)), new THREE.Vector3(1, 1, 1)));
@@ -323,13 +528,45 @@ export function buildEnemyRifleGeometry() {
     if (!g.index) { const idx = new Uint32Array(g.attributes.position.count); for (let i = 0; i < idx.length; i++) idx[i] = i; g.setIndex(new THREE.BufferAttribute(idx, 1)); }
     parts.push(g);
   };
-  add(new THREE.BoxGeometry(0.034, 0.075, 0.22), 0, 0.03, -0.01);
-  add(new THREE.BoxGeometry(0.03, 0.1, 0.045), 0, -0.045, 0.02, -0.3);
-  add(new THREE.BoxGeometry(0.026, 0.16, 0.06), 0, -0.07, -0.07, 0.2, 0x1c1c1c);
-  add(new THREE.CylinderGeometry(0.024, 0.024, 0.28, 8), 0, 0.035, -0.25, Math.PI / 2, 0x3c3a33);
-  add(new THREE.CylinderGeometry(0.008, 0.008, 0.2, 6), 0, 0.035, -0.48, Math.PI / 2);
-  add(new THREE.CylinderGeometry(0.012, 0.012, 0.05, 6), 0, 0.035, -0.6, Math.PI / 2);
-  add(new THREE.BoxGeometry(0.04, 0.07, 0.15), 0, 0.02, 0.165, 0, 0x2e2d2a);
-  add(new THREE.BoxGeometry(0.03, 0.035, 0.07), 0, 0.085, -0.02);
-  return mergeGeometries(parts, false);
+  const cyl = (r, l, seg = 8) => new THREE.CylinderGeometry(r, r, l, seg);
+  let muzzle;
+  if (kind === 'ak' || kind === 'svd') {
+    const wood = kind === 'svd' ? 0x6a4a2c : 0x7a4f2c, steel = 0x2a2b2c;
+    const L = kind === 'svd' ? 1.28 : 1;
+    add(new THREE.BoxGeometry(0.036, 0.07, 0.24), 0, 0.03, -0.02, 0, steel);
+    add(new THREE.BoxGeometry(0.03, 0.095, 0.04), 0, -0.045, 0.02, -0.35, wood);
+    if (kind === 'ak') {
+      const mag = new THREE.BoxGeometry(0.026, 0.19, 0.06); mag.translate(0, -0.08, 0);
+      add(mag, 0, -0.01, -0.08, 0.38, 0x2d2419);
+      add(new THREE.BoxGeometry(0.04, 0.066, 0.2), 0, 0.02, 0.19, 0.08, wood);
+    } else {
+      add(new THREE.BoxGeometry(0.026, 0.1, 0.06), 0, -0.05, -0.08, 0.15, steel);
+      add(new THREE.BoxGeometry(0.036, 0.03, 0.26), 0, 0.045, 0.2, 0.0, wood);
+      add(new THREE.BoxGeometry(0.036, 0.024, 0.2), 0, -0.02, 0.21, 0.28, wood);
+      add(new THREE.BoxGeometry(0.03, 0.09, 0.03), 0, 0.0, 0.1, 0, wood);
+      add(cyl(0.017, 0.2, 10), 0, 0.105, -0.05, Math.PI / 2, 0x1c1d1e);
+      add(cyl(0.022, 0.04, 10), 0, 0.105, -0.17, Math.PI / 2, 0x1c1d1e);
+      add(new THREE.BoxGeometry(0.02, 0.04, 0.05), 0, 0.075, -0.05, 0, 0x1c1d1e);
+    }
+    add(cyl(0.022, 0.24 * L, 8), 0, 0.03, -0.25 * L, Math.PI / 2, wood);
+    add(cyl(0.007, 0.26 * L, 6), 0, 0.058, -0.24 * L, Math.PI / 2, steel);
+    add(cyl(0.008, 0.26 * L, 6), 0, 0.03, -0.52 * L, Math.PI / 2, steel);
+    add(new THREE.BoxGeometry(0.008, 0.03, 0.01), 0, 0.05, -0.6 * L, 0, steel);
+    add(cyl(0.012, 0.05, 6), 0, 0.03, -0.66 * L, Math.PI / 2, steel);
+    muzzle = new THREE.Vector3(0, 0.03, -0.69 * L);
+  } else {
+    const dmr = kind === 'dmr';
+    const furn = dmr ? 0x8e7f60 : 0x3c3a33, dark = 0x262728;
+    add(new THREE.BoxGeometry(0.034, 0.075, 0.22), 0, 0.03, -0.01, 0, dark);
+    add(new THREE.BoxGeometry(0.03, 0.1, 0.045), 0, -0.045, 0.02, -0.3, dark);
+    add(new THREE.BoxGeometry(0.026, 0.16, 0.06), 0, -0.07, -0.07, 0.2, 0x1c1c1c);
+    add(cyl(0.024, dmr ? 0.34 : 0.28), 0, 0.035, dmr ? -0.28 : -0.25, Math.PI / 2, furn);
+    add(cyl(0.008, 0.2), 0, 0.035, dmr ? -0.56 : -0.48, Math.PI / 2, dark);
+    add(cyl(0.012, 0.05), 0, 0.035, dmr ? -0.68 : -0.6, Math.PI / 2, dark);
+    add(new THREE.BoxGeometry(0.04, 0.07, 0.15), 0, 0.02, 0.165, 0, dmr ? furn : 0x2e2d2a);
+    if (dmr) { add(cyl(0.017, 0.16, 10), 0, 0.1, -0.04, Math.PI / 2, 0x1c1d1e); add(cyl(0.022, 0.04, 10), 0, 0.1, -0.13, Math.PI / 2, 0x1c1d1e); }
+    else add(new THREE.BoxGeometry(0.03, 0.035, 0.07), 0, 0.085, -0.02, 0, dark);
+    muzzle = new THREE.Vector3(0, 0.035, dmr ? -0.71 : -0.63);
+  }
+  return { geometry: mergeGeometries(parts, false), muzzle };
 }

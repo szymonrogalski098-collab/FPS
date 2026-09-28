@@ -3,7 +3,12 @@
 // interiors read as enclosed spaces instead of flat, evenly-lit boxes. This is a cheap stand-in for GI.
 import * as THREE from 'three';
 
-const AMB_COUNT = 6;
+const AMB_COUNT = 8;
+
+const WHITE = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1);
+WHITE.needsUpdate = true;
+const BLACK = new THREE.DataTexture(new Uint8Array([0, 0, 0, 255]), 1, 1);
+BLACK.needsUpdate = true;
 
 export const ambientUniforms = {
   uAmbMin: { value: Array.from({ length: AMB_COUNT }, () => new THREE.Vector3(1e5, 1e5, 1e5)) },
@@ -11,6 +16,21 @@ export const ambientUniforms = {
   uAmbVal: { value: new Array(AMB_COUNT).fill(1) },
   uAmbSoft: { value: new Array(AMB_COUNT).fill(1) },
   uNoShadowSun: { value: 0 },
+  // mountain terrain: baked sun visibility (R) + horizon AO (G), near & far bakes
+  uTerrOn: { value: 0 },
+  uTerrLightN: { value: WHITE },
+  uTerrLightF: { value: WHITE },
+  uTerrRect: { value: new THREE.Vector2(800, 12000) },
+  // drifting cloud shadows
+  uCloudOn: { value: 0 },
+  uCloudTex: { value: BLACK },
+  uCloudXform: { value: new THREE.Vector3(1 / 1400, 0, 0) },
+  // aerial perspective (height fog with sun-coloured in-scattering)
+  uAerialOn: { value: 0 },
+  uHaze: { value: new THREE.Color(0.6, 0.66, 0.74) },
+  uHazeSun: { value: new THREE.Color(1.0, 0.86, 0.66) },
+  uSunDirW: { value: new THREE.Vector3(0, 1, 0) },
+  uAerial: { value: new THREE.Vector4(1 / 5200, 1 / 1100, 0, 7) },
 };
 
 /** Without a shadow map the sun would light interiors through the roof; mask it by the ambient volume instead. */
@@ -18,12 +38,38 @@ export function setSunMask(noShadows) { ambientUniforms.uNoShadowSun.value = noS
 
 /** zones: [{min:[x,y,z], max:[x,y,z], value, soft}] ordered from large to small. */
 export function setAmbientZones(zones) {
-  zones.slice(0, AMB_COUNT).forEach((z, i) => {
-    ambientUniforms.uAmbMin.value[i].set(...z.min);
-    ambientUniforms.uAmbMax.value[i].set(...z.max);
-    ambientUniforms.uAmbVal.value[i] = z.value;
-    ambientUniforms.uAmbSoft.value[i] = z.soft;
-  });
+  for (let i = 0; i < AMB_COUNT; i++) {
+    const z = zones[i];
+    if (z) {
+      ambientUniforms.uAmbMin.value[i].set(...z.min);
+      ambientUniforms.uAmbMax.value[i].set(...z.max);
+      ambientUniforms.uAmbVal.value[i] = z.value;
+      ambientUniforms.uAmbSoft.value[i] = z.soft;
+    } else {
+      ambientUniforms.uAmbMin.value[i].set(1e5, 1e5, 1e5);
+      ambientUniforms.uAmbMax.value[i].set(1e5, 1e5, 1e5);
+      ambientUniforms.uAmbVal.value[i] = 1;
+      ambientUniforms.uAmbSoft.value[i] = 1;
+    }
+  }
+}
+
+/** Per-world outdoor lighting features (terrain bake, clouds, aerial perspective). */
+export function setWorldLighting(o = {}) {
+  const U = ambientUniforms;
+  U.uTerrOn.value = o.terrain ? 1 : 0;
+  U.uTerrLightN.value = o.terrain ? o.terrain.near : WHITE;
+  U.uTerrLightF.value = o.terrain ? o.terrain.far : WHITE;
+  if (o.terrain) U.uTerrRect.value.set(o.terrain.nearHalf, o.terrain.farHalf);
+  U.uCloudOn.value = o.clouds ? 1 : 0;
+  U.uCloudTex.value = o.clouds ? o.clouds.tex : BLACK;
+  U.uAerialOn.value = o.aerial ? 1 : 0;
+  if (o.aerial) {
+    U.uHaze.value.copy(o.aerial.haze);
+    U.uHazeSun.value.copy(o.aerial.hazeSun);
+    U.uAerial.value.set(o.aerial.density, o.aerial.falloff, o.aerial.baseHeight, o.aerial.sunPower);
+  }
+  if (o.sunDir) U.uSunDirW.value.copy(o.sunDir).normalize();
 }
 
 /** CPU mirror of the GLSL function; used for view-model lighting and auto exposure. */
@@ -56,6 +102,18 @@ uniform vec3 uAmbMax[${AMB_COUNT}];
 uniform float uAmbVal[${AMB_COUNT}];
 uniform float uAmbSoft[${AMB_COUNT}];
 uniform float uNoShadowSun;
+uniform float uTerrOn;
+uniform sampler2D uTerrLightN;
+uniform sampler2D uTerrLightF;
+uniform vec2 uTerrRect;
+uniform float uCloudOn;
+uniform sampler2D uCloudTex;
+uniform vec3 uCloudXform;
+uniform float uAerialOn;
+uniform vec3 uHaze;
+uniform vec3 uHazeSun;
+uniform vec3 uSunDirW;
+uniform vec4 uAerial;
 float ambientVolume(vec3 p) {
   float f = 1.0;
   for (int i = 0; i < ${AMB_COUNT}; i++) {
@@ -66,9 +124,34 @@ float ambientVolume(vec3 p) {
   }
   return f;
 }
+vec2 gwTerrainLight(vec3 p) {
+  if (uTerrOn < 0.5) return vec2(1.0);
+  vec2 a = abs(p.xz);
+  if (a.x < uTerrRect.x && a.y < uTerrRect.x) return texture2D(uTerrLightN, p.xz / (2.0 * uTerrRect.x) + 0.5).rg;
+  return texture2D(uTerrLightF, p.xz / (2.0 * uTerrRect.y) + 0.5).rg;
+}
+float gwSunMaskFn(vec3 p) {
+  float m = mix(1.0, smoothstep(0.62, 0.95, ambientVolume(p)), uNoShadowSun);
+  m *= gwTerrainLight(p).r;
+  if (uCloudOn > 0.5) m *= 1.0 - 0.62 * texture2D(uCloudTex, p.xz * uCloudXform.x + uCloudXform.yz).r;
+  return m;
+}
+vec3 gwAerial(vec3 col, vec3 wp) {
+  vec3 v = wp - cameraPosition;
+  float L = length(v);
+  vec3 rd = v / max(L, 1e-3);
+  float h0 = cameraPosition.y - uAerial.z;
+  float k = rd.y * uAerial.y;
+  float base = uAerial.x * exp(-h0 * uAerial.y);
+  float od = abs(k) < 1e-5 ? base * L : base * (1.0 - exp(-k * L)) / k;
+  float T = exp(-od);
+  float s = pow(max(dot(rd, uSunDirW), 0.0), uAerial.w);
+  vec3 haze = mix(uHaze, uHazeSun, s);
+  return col * T + haze * (1.0 - T);
+}
 `;
 const AMB_FRAG = `
-  float ambF = ambientVolume(vAmbPos);
+  float ambF = ambientVolume(vAmbPos) * mix(1.0, gwTerrainLight(vAmbPos).g, uTerrOn);
   #if defined( RE_IndirectDiffuse )
     irradiance *= ambF;
     iblIrradiance *= ambF;
@@ -76,6 +159,20 @@ const AMB_FRAG = `
   #if defined( RE_IndirectSpecular )
     radiance *= ambF;
   #endif
+`;
+const FOG_FRAG = `
+#ifdef USE_FOG
+  if (uAerialOn > 0.5) {
+    gl_FragColor.rgb = gwAerial(gl_FragColor.rgb, vAmbPos);
+  } else {
+    #ifdef FOG_EXP2
+      float fogFactor = 1.0 - exp( - fogDensity * fogDensity * vFogDepth * vFogDepth );
+    #else
+      float fogFactor = smoothstep( fogNear, fogFar, vFogDepth );
+    #endif
+    gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
+  }
+#endif
 `;
 
 export function patchAmbient(mat) {
@@ -88,11 +185,12 @@ export function patchAmbient(mat) {
       .replace('#include <worldpos_vertex>', `#include <worldpos_vertex>\n${AMB_VERT}`);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${AMB_FRAG_DECL}`)
-      .replace('#include <lights_fragment_begin>', 'float gwSunMask = mix(1.0, smoothstep(0.62, 0.95, ambientVolume(vAmbPos)), uNoShadowSun);\n' +
+      .replace('#include <lights_fragment_begin>', 'float gwSunMask = gwSunMaskFn(vAmbPos);\n' +
         THREE.ShaderChunk.lights_fragment_begin.replace(
           'getDirectionalLightInfo( directionalLight, directLight );',
           'getDirectionalLightInfo( directionalLight, directLight );\n\t\tdirectLight.color *= gwSunMask;'))
-      .replace('#include <lights_fragment_end>', `${AMB_FRAG}\n#include <lights_fragment_end>`);
+      .replace('#include <lights_fragment_end>', `${AMB_FRAG}\n#include <lights_fragment_end>`)
+      .replace('#include <fog_fragment>', FOG_FRAG);
   };
   const prevKey = mat.customProgramCacheKey ? mat.customProgramCacheKey.bind(mat) : null;
   mat.customProgramCacheKey = () => 'amb' + (prevKey ? prevKey() : '');

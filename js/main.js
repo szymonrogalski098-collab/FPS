@@ -74,14 +74,37 @@ async function lockPointer() {
   $('click-resume').classList.toggle('hidden', ok);
 }
 
-async function play() {
+/** Builds the mountain world the first time it is chosen (shows the loading screen meanwhile). */
+async function ensureWorld(mode) {
+  if (mode !== 'mountain' || game.worlds.mountain) return true;
+  ui = 'loading';
+  showScreen('loading');
+  const fill = $('load-fill'), text = $('load-text');
+  try {
+    await game.loadMountain(async (k, label) => {
+      fill.style.width = `${Math.round(k * 100)}%`;
+      text.textContent = label;
+      await new Promise((r) => setTimeout(r, 0));
+    });
+  } catch (e) {
+    console.error(e);
+    fatal(`Something went wrong while building the mountains.<br><small>${String(e && e.message || e)}</small>`);
+    return false;
+  }
+  return true;
+}
+
+async function play(mode = 'depot') {
   await audio.resume();
   audio.playUI('click');
   await enterFullscreen();
+  if (!(await ensureWorld(mode))) return;
+  if (game.mode !== mode) game.setWorld(mode);
   game.startMission();
   ui = 'playing';
   input.enabled = true;
   showScreen(null);
+  last = performance.now();
   await lockPointer();
 }
 
@@ -121,6 +144,9 @@ function quitToMenu() {
   input.enabled = false;
   input.clearAll();
   input.releaseLock();
+  if (game.worlds.mountain) game.worlds.mountain.survival.stopAudio();
+  if (game.mode !== 'depot') game.setWorld('depot');
+  game.hud.setMode('depot');
   ui = 'menu';
   game.state = 'menu';
   game.menuT = 0;
@@ -134,14 +160,29 @@ game.onEnd = (kind, s) => {
   input.clearAll();
   input.releaseLock();
   $('click-resume').classList.add('hidden');
-  const ok = kind === 'complete';
-  $('end-title').textContent = ok ? 'MISSION COMPLETE' : 'KILLED IN ACTION';
+  if (game.worlds.mountain) game.worlds.mountain.survival.stopAudio();
+  const ok = kind === 'complete' || kind === 'survived';
+  let cells;
+  if (s.mode === 'mountain') {
+    $('end-kicker').textContent = 'MOUNTAIN SURVIVAL · KOH-E ZARD';
+    $('end-title').textContent = ok ? 'VICTORY' : 'GAME OVER';
+    $('end-sub').textContent = ok
+      ? `Exfil complete. ${s.teamAlive} of ${s.teamTotal} team-mates made it onto the helicopter with you.`
+      : `You went down after ${formatTime(s.survived)} on the mountain. There is no second chance up here.`;
+    cells = [
+      [formatTime(s.survived), 'Time survived'], [String(s.kills), 'Your kills'], [String(s.headshots), 'Headshots'],
+      [s.longest ? `${s.longest} m` : '—', 'Longest kill'], [`${s.teamAlive}/${s.teamTotal}`, 'Squad alive'], [`${s.accuracy}%`, 'Accuracy'],
+    ];
+  } else {
+    $('end-kicker').textContent = 'OPERATION GREYWATER';
+    $('end-title').textContent = ok ? 'MISSION COMPLETE' : 'KILLED IN ACTION';
+    $('end-sub').textContent = ok ? 'Drive recovered. You made it out.' : 'Your operation ended inside Kestrel Freight Depot.';
+    cells = [
+      [formatTime(s.time), 'Time'], [String(s.kills), 'Hostiles down'], [String(s.headshots), 'Headshots'],
+      [`${s.accuracy}%`, 'Accuracy'], [String(s.shots), 'Rounds fired'], [String(Math.round(s.damage)), 'Damage taken'],
+    ];
+  }
   $('end-title').classList.toggle('fail', !ok);
-  $('end-sub').textContent = ok ? 'Drive recovered. You made it out.' : 'Your operation ended inside Kestrel Freight Depot.';
-  const cells = [
-    [formatTime(s.time), 'Time'], [String(s.kills), 'Hostiles down'], [String(s.headshots), 'Headshots'],
-    [`${s.accuracy}%`, 'Accuracy'], [String(s.shots), 'Rounds fired'], [String(Math.round(s.damage)), 'Damage taken'],
-  ];
   $('end-stats').innerHTML = cells.map(([v, l]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
   showScreen('end');
 };
@@ -156,7 +197,7 @@ document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-cmd]');
   if (!b) return;
   const cmd = b.dataset.cmd;
-  if (cmd === 'play') play();
+  if (cmd === 'play') play(b.dataset.mode || 'depot');
   else if (cmd === 'resume') resume();
   else if (cmd === 'restart') restart();
   else if (cmd === 'quit') quitToMenu();
@@ -165,6 +206,15 @@ document.addEventListener('click', (e) => {
   else if (cmd === 'back') closePanel();
 });
 document.querySelectorAll('.mbtn').forEach((b) => b.addEventListener('mouseenter', () => audio.playUI('hover')));
+// the briefing panel follows the highlighted deployment
+document.querySelectorAll('[data-brief]').forEach((b) => {
+  const show = () => {
+    for (const id of ['brief-depot', 'brief-mountain']) $(id).classList.toggle('hidden', id !== b.dataset.brief);
+  };
+  b.addEventListener('mouseenter', show);
+  b.addEventListener('focus', show);
+  b.addEventListener('touchstart', show, { passive: true });
+});
 $('click-resume').addEventListener('click', () => lockPointer());
 document.querySelectorAll('.panel').forEach((p) => p.addEventListener('click', (e) => { if (e.target === p) closePanel(); }));
 window.addEventListener('keydown', (e) => {
@@ -195,10 +245,10 @@ function applySetting(k) {
     const q = QUALITY[settings.quality];
     pipe.applyQuality(q);
     setSunMask(!q.shadows);
-    if (game.lights) game.lights.sun.castShadow = q.shadows;
+    for (const w of Object.values(game.worlds)) if (w.lights) w.lights.sun.castShadow = q.shadows;
     if (game.scene) {
       const bump = (o) => { if (o.material) (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.needsUpdate = true; }); };
-      game.scene.traverse(bump);
+      for (const w of Object.values(game.worlds)) w.scene.traverse(bump);
       game.viewmodel.scene.traverse(bump);
     }
   }

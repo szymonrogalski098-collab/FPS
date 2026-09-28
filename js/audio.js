@@ -100,7 +100,145 @@ const GUNS = {
   pistol: { dur: 0.6, crackHP: 1500, crack: 1.35, crackD: 0.0035, bodyLP: 3200, body: 0.9, bodyD: 0.028, midF: 1100, mid: 0.6, f0: 190, f1: 70, thump: 0.8, thumpD: 0.05, tailLP: 700, tail: 0.3, tailD: 0.14, mech: 0.022, drive: 2.3 },
   shotgun: { dur: 1.0, crackHP: 700, crack: 1.0, crackD: 0.006, bodyLP: 1800, body: 1.15, bodyD: 0.07, midF: 500, mid: 0.8, f0: 110, f1: 34, thump: 1.4, thumpD: 0.13, tailLP: 380, tail: 0.6, tailD: 0.3, mech: 0, drive: 2.8 },
   enemy: { dur: 0.75, crackHP: 900, crack: 1.1, crackD: 0.005, bodyLP: 2300, body: 1.0, bodyD: 0.042, midF: 780, mid: 0.75, f0: 140, f1: 45, thump: 1.1, thumpD: 0.08, tailLP: 480, tail: 0.5, tailD: 0.2, mech: 0, drive: 2.6 },
+  // mountain arsenal: full-power 7.62 rounds are deeper and ring on much longer
+  sniper: { dur: 1.4, crackHP: 850, crack: 1.45, crackD: 0.0055, bodyLP: 1900, body: 1.25, bodyD: 0.055, midF: 560, mid: 0.85, f0: 105, f1: 34, thump: 1.5, thumpD: 0.12, tailLP: 360, tail: 0.7, tailD: 0.36, mech: 0, drive: 3.0 },
+  dmr: { dur: 1.05, crackHP: 950, crack: 1.35, crackD: 0.005, bodyLP: 2200, body: 1.15, bodyD: 0.048, midF: 680, mid: 0.8, f0: 120, f1: 38, thump: 1.3, thumpD: 0.095, tailLP: 420, tail: 0.58, tailD: 0.28, mech: 0.026, drive: 2.8 },
+  ak: { dur: 0.85, crackHP: 780, crack: 1.05, crackD: 0.0052, bodyLP: 1950, body: 1.12, bodyD: 0.046, midF: 640, mid: 0.9, f0: 128, f1: 41, thump: 1.22, thumpD: 0.088, tailLP: 440, tail: 0.52, tailD: 0.23, mech: 0, drive: 2.7 },
+  svd: { dur: 1.05, crackHP: 900, crack: 1.25, crackD: 0.0052, bodyLP: 2100, body: 1.15, bodyD: 0.05, midF: 620, mid: 0.8, f0: 116, f1: 37, thump: 1.35, thumpD: 0.1, tailLP: 400, tail: 0.6, tailD: 0.3, mech: 0, drive: 2.8 },
+  m4: { dur: 0.8, crackHP: 1050, crack: 1.2, crackD: 0.0046, bodyLP: 2500, body: 1.0, bodyD: 0.04, midF: 820, mid: 0.72, f0: 145, f1: 46, thump: 1.08, thumpD: 0.078, tailLP: 500, tail: 0.46, tailD: 0.2, mech: 0, drive: 2.6 },
 };
+
+/** Supersonic crack of a rifle round passing close by: a sharp N-wave and a bright snap. */
+function synthCrack() {
+  const o = buf(0.3);
+  const s0 = Math.floor(0.004 * SR), n = 14 + Math.floor(Math.random() * 6);
+  for (let i = 0; i < n; i++) o[s0 + i] += (i < n / 2 ? 1 : -1) * (1 - Math.abs(i - n / 2) / (n / 2)) * 1.4;
+  noiseBurst(o, 0.004, 0.03, 'highpass', 4500, 0.7, 0.0001, 0.002, 1.0);
+  noiseBurst(o, 0.006, 0.2, 'bandpass', 2600, 0.8, 0.002, 0.04, 0.22);
+  return normalize(o, 0.95);
+}
+
+function synthBolt(kind) {
+  const o = buf(0.5);
+  switch (kind) {
+    case 'boltUp': click(o, 0, 1900, 0.8, 0.02); scrape(o, 0.005, 0.05, 2400, 0.12); break;
+    case 'boltBack': scrape(o, 0, 0.09, 1500, 0.24); click(o, 0.09, 1200, 1.0, 0.03); thump(o, 0.09, 260, 140, 0.02, 0.3);
+      modal(o, 0.2, [3300, 5500, 7200], [0.05, 0.04, 0.03], [0.12, 0.08, 0.05]); break;
+    case 'boltFwd': scrape(o, 0, 0.08, 1700, 0.22); click(o, 0.08, 1500, 0.9, 0.025); break;
+    case 'boltDown': click(o, 0, 1300, 1.0, 0.035); thump(o, 0, 300, 170, 0.02, 0.4); break;
+  }
+  return normalize(o, 0.8);
+}
+
+function synthMedical(kind) {
+  if (kind === 'bandageRip') {
+    const o = buf(0.6);
+    for (let k = 0; k < 34; k++) noiseBurst(o, 0.02 + k * 0.011 + rand(0, 0.004), 0.012, 'bandpass', rand(2200, 4200), 1.4, 0.0005, 0.003, rand(0.3, 0.7));
+    cloth(o, 0.35, 0.2, 0.1);
+    return normalize(o, 0.55);
+  }
+  const o = buf(0.9);
+  cloth(o, 0, 0.35, 0.16); cloth(o, 0.38, 0.4, 0.13);
+  return normalize(o, 0.45);
+}
+
+function synthBreath(inhale) {
+  const o = buf(inhale ? 0.75 : 1.0);
+  const len = o.length, bp = new Biquad('bandpass', inhale ? 1500 : 900, 0.9), lp = new Biquad('lowpass', 3000, 0.7);
+  for (let i = 0; i < len; i++) {
+    const k = i / len;
+    const env = inhale ? Math.sin(Math.PI * Math.min(1, k * 1.2)) * (1 - k * 0.3) : Math.pow(Math.sin(Math.PI * k), 0.8) * (1 - k * 0.5);
+    if (i % 128 === 0) bp.set('bandpass', (inhale ? 1300 : 900) + Math.sin(k * 6) * 200, 0.9);
+    o[i] = lp.p(bp.p(N())) * env;
+  }
+  return normalize(o, 0.4);
+}
+
+function synthSquelch() {
+  const o = buf(0.25);
+  click(o, 0, 2600, 0.5, 0.004);
+  const hp = new Biquad('highpass', 900, 0.7), lp = new Biquad('lowpass', 3800, 0.7);
+  const s0 = Math.floor(0.006 * SR), len = Math.floor(0.12 * SR);
+  for (let i = 0; i < len; i++) o[s0 + i] += lp.p(hp.p(N())) * Math.exp(-i / len * 2.5) * 0.5;
+  return normalize(o, 0.5);
+}
+
+function synthStepNature(surface) {
+  const o = buf(0.4);
+  thump(o, 0, 110, 55, 0.02, surface === 'dirt' ? 0.7 : 0.45);
+  noiseBurst(o, 0, 0.1, 'lowpass', 280, 0.8, 0.001, 0.018, 0.8);
+  if (surface === 'grass') {
+    for (let k = 0; k < 3; k++) noiseBurst(o, rand(0, 0.05), 0.14, 'bandpass', rand(2800, 5200), 0.6, 0.02, 0.04, rand(0.25, 0.4));
+  } else if (surface === 'gravel') {
+    for (let k = 0; k < 30; k++) noiseBurst(o, Math.pow(Math.random(), 1.6) * 0.11, 0.01, 'highpass', rand(2200, 5200), 0.7, 0.0002, rand(0.0006, 0.0018), rand(0.18, 0.5));
+    noiseBurst(o, 0.003, 0.12, 'bandpass', 1500, 0.8, 0.004, 0.035, 0.35);
+  } else {
+    for (let k = 0; k < 8; k++) noiseBurst(o, rand(0, 0.06), 0.012, 'highpass', rand(1800, 3500), 0.7, 0.0002, rand(0.001, 0.002), rand(0.08, 0.2));
+    noiseBurst(o, 0.004, 0.12, 'bandpass', 900, 0.8, 0.006, 0.03, 0.3);
+  }
+  return normalize(o, 0.7);
+}
+
+/** Rotor thump + turbine whine. far: a distant flyby that fades, otherwise a seamless loop. */
+function synthHelo(far) {
+  const bladeHz = 4.8, pulses = far ? 34 : 10;
+  const o = buf(pulses / bladeHz + (far ? 0.6 : 0));
+  const lp = new Biquad('lowpass', far ? 260 : 700, 0.8), lp2 = new Biquad('lowpass', 160, 0.7);
+  let ph = 0;
+  for (let i = 0; i < o.length; i++) {
+    const t = i / SR;
+    const bp = (t * bladeHz) % 1;
+    const slap = Math.exp(-bp / 0.07) * (0.8 + 0.2 * Math.sin(t * 13));
+    const n = N();
+    let v = lp.p(n) * slap * 1.2 + lp2.p(n) * 0.35;
+    ph += (TAU * (far ? 900 : 2300 + Math.sin(t * 2) * 20)) / SR;
+    v += Math.sin(ph) * (far ? 0.01 : 0.05);
+    if (far) v *= Math.sin(Math.PI * Math.min(1, t / (o.length / SR))) * (1 - t / (o.length / SR) * 0.6);
+    o[i] = v;
+  }
+  return normalize(o, 0.8, far);
+}
+
+function synthRockfall() {
+  const o = buf(1.8);
+  for (let k = 0; k < 40; k++) {
+    const t = Math.pow(Math.random(), 1.4) * 1.5;
+    const f = rand(1600, 4200);
+    modal(o, t, [f, f * 1.7], [rand(0.006, 0.02), 0.008], [rand(0.08, 0.3), 0.08]);
+    noiseBurst(o, t, 0.015, 'highpass', 2500, 0.7, 0.0002, 0.002, rand(0.05, 0.2));
+  }
+  noiseBurst(o, 0, 1.5, 'lowpass', 300, 0.7, 0.2, 0.5, 0.15);
+  return normalize(o, 0.5);
+}
+
+/** Mountain acoustics: long, dark tail with discrete slap-back echoes from the valley walls. */
+function makeMountainIR(ctx) {
+  const sr = ctx.sampleRate, len = Math.floor(5.2 * sr);
+  const ir = ctx.createBuffer(2, len, sr);
+  for (let ch = 0; ch < 2; ch++) {
+    const d = ir.getChannelData(ch);
+    let lp = 0;
+    for (let i = 0; i < len; i++) {
+      const t = i / sr;
+      const v = N() * Math.exp(-t / 1.25) * 0.1 * Math.min(1, t / 0.08);
+      const k = 0.55 + 0.42 * Math.min(1, t / 2.5);
+      lp = lp * k + v * (1 - k);
+      d[i] = lp * 2.6;
+    }
+    const echoes = [[0.42, 0.55], [0.78, 0.42], [1.24, 0.34], [1.8, 0.26], [2.45, 0.2], [3.2, 0.13], [4.1, 0.08]];
+    for (const [t0, a] of echoes) {
+      const t = t0 * (ch ? 1.06 : 1) + rand(-0.02, 0.02);
+      const s0 = Math.floor(t * sr), w = Math.floor((0.05 + t0 * 0.05) * sr);
+      let e = 0;
+      for (let k = 0; k < w && s0 + k < len; k++) {
+        const env = Math.sin(Math.PI * k / w);
+        e = e * 0.93 + N() * 0.07;
+        d[s0 + k] += e * a * env * 3;
+      }
+    }
+  }
+  return ir;
+}
 
 function click(o, t, f = 2600, g = 0.5, ring = 0.01) {
   modal(o, t, [f * rand(0.95, 1.05), f * 1.63, f * 2.41], [ring, ring * 0.7, ring * 0.5], [0.5 * g, 0.3 * g, 0.2 * g]);
@@ -339,6 +477,16 @@ function synthMisc(kind) {
     noiseBurst(o, 0, 3, 'lowpass', 120, 0.7, 0.3, 0.8, 1.0);
     return normalize(o, 0.6);
   }
+  if (kind === 'cloth') {
+    const o = buf(0.5);
+    cloth(o, 0, 0.35, 0.14);
+    return normalize(o, 0.5);
+  }
+  if (kind === 'click') {
+    const o = buf(0.08);
+    click(o, 0, 3000, 0.5, 0.004);
+    return normalize(o, 0.5);
+  }
   if (kind === 'pigeons') {
     const o = buf(1.6);
     for (let k = 0; k < 26; k++) noiseBurst(o, k * 0.055 + rand(0, 0.02), 0.04, 'bandpass', rand(500, 900), 1, 0.004, 0.012, 0.6 * (1 - k / 30));
@@ -405,6 +553,9 @@ function makeIR(ctx, seconds, outdoor) {
   return ir;
 }
 
+// sounds that only exist once the mountain set is generated fall back to their closest depot sound
+const FALLBACK = { step_dirt: 'step_asphalt', step_grass: 'step_asphalt', step_gravel: 'step_concrete', crack: 'whizz', radioSquelch: 'radio', cloth: 'adsIn' };
+
 // ------------------------------------------------------------------ engine
 
 export class AudioEngine {
@@ -441,11 +592,17 @@ export class AudioEngine {
     add('radio', 2, () => synthRadio(false));
     add('chatter', 4, () => synthRadio(true));
     for (const u of ['click', 'hover', 'objective']) add('ui_' + u, 1, () => synthUI(u));
-    for (const m of ['heart', 'medkit', 'pickup', 'bodyfall', 'gunDrop', 'creak', 'drip', 'rumble', 'pigeons']) add(m, m === 'drip' || m === 'creak' ? 3 : 1, () => synthMisc(m));
+    for (const m of ['heart', 'medkit', 'pickup', 'bodyfall', 'gunDrop', 'creak', 'drip', 'rumble', 'pigeons', 'cloth', 'click']) add(m, m === 'drip' || m === 'creak' ? 3 : 1, () => synthMisc(m));
     add('loop_wind', 1, () => makeLoop('wind', 8));
     add('loop_room', 1, () => makeLoop('room', 5));
     add('loop_generator', 1, () => makeLoop('generator', 2.2));
     add('loop_buzz', 1, () => makeLoop('buzz', 1.2));
+    await this.runJobs(jobs, progress);
+    this.buildGraph();
+    this.ready = true;
+  }
+
+  async runJobs(jobs, progress) {
     for (let j = 0; j < jobs.length; j++) {
       const [name, count, fn] = jobs[j];
       this.buffers[name] = [];
@@ -457,8 +614,73 @@ export class AudioEngine {
       }
       if (j % 6 === 5 && progress) await progress(j / jobs.length);
     }
-    this.buildGraph();
-    this.ready = true;
+  }
+
+  /** Sounds only the mountain needs (built when that world is first loaded). */
+  async generateMountain(progress) {
+    if (this.mountainReady || !this.ctx) return;
+    const jobs = [];
+    const add = (name, count, fn) => jobs.push([name, count, fn]);
+    add('sniper', 3, () => synthGunshot(vary(GUNS.sniper, 0.05)));
+    add('dmr', 3, () => synthGunshot(vary(GUNS.dmr, 0.05)));
+    add('akShot', 4, () => synthGunshot(vary(GUNS.ak, 0.1)));
+    add('svdShot', 3, () => synthGunshot(vary(GUNS.svd, 0.08)));
+    add('m4Shot', 4, () => synthGunshot(vary(GUNS.m4, 0.08)));
+    add('dmrShot', 3, () => synthGunshot(vary(GUNS.dmr, 0.08)));
+    add('crack', 4, synthCrack);
+    for (const b of ['boltUp', 'boltBack', 'boltFwd', 'boltDown']) add(b, 2, () => synthBolt(b));
+    add('bandageRip', 2, () => synthMedical('bandageRip'));
+    add('bandageWrap', 3, () => synthMedical('bandageWrap'));
+    add('breathIn', 2, () => synthBreath(true));
+    add('breathOut', 2, () => synthBreath(false));
+    add('radioSquelch', 3, synthSquelch);
+    for (const sf of ['grass', 'gravel', 'dirt']) add('step_' + sf, 5, () => synthStepNature(sf));
+    add('heloFar', 1, () => synthHelo(true));
+    add('heloLoop', 1, () => synthHelo(false));
+    add('rockfall', 2, synthRockfall);
+    await this.runJobs(jobs, progress);
+    this.irMountain = makeMountainIR(this.ctx);
+    this.mountainReady = true;
+  }
+
+  /** Outdoor acoustics per world: the depot yard or the mountain valleys (long echoes). */
+  setEnvironment(id) {
+    this.env = id;
+    if (!this.ready) return;
+    if (id === 'mountain' && this.irMountain) { this.revOut.buffer = this.irMountain; this.revOutGain.gain.value = 0.9; }
+    else if (this.irDepot) { this.revOut.buffer = this.irDepot; this.revOutGain.gain.value = 0.7; }
+  }
+
+  /** A looping positional source (helicopter). Returns { set(pos, volume), stop() }. */
+  loop(name, opts = {}) {
+    if (!this.ready || !this.buffers[name]) return { set() {}, stop() {} };
+    const c = this.ctx;
+    const src = c.createBufferSource();
+    src.buffer = this.buffers[name][0];
+    src.loop = true;
+    const g = c.createGain();
+    g.gain.value = opts.volume ?? 1;
+    const f = c.createBiquadFilter();
+    f.type = 'lowpass';
+    f.frequency.value = 18000;
+    const p = c.createPanner();
+    p.panningModel = 'equalpower'; p.distanceModel = 'inverse'; p.refDistance = opts.ref || 30; p.rolloffFactor = opts.rolloff ?? 1; p.maxDistance = 5000;
+    src.connect(f).connect(g).connect(p).connect(this.sfx);
+    const sOut = c.createGain(); sOut.gain.value = opts.reverb ?? 0.3;
+    p.connect(sOut).connect(this.revOut);
+    src.start();
+    const L = this.listener;
+    return {
+      set: (pos, vol) => {
+        const t = c.currentTime;
+        if (p.positionX) { p.positionX.setTargetAtTime(pos.x, t, 0.05); p.positionY.setTargetAtTime(pos.y, t, 0.05); p.positionZ.setTargetAtTime(pos.z, t, 0.05); }
+        else p.setPosition(pos.x, pos.y, pos.z);
+        g.gain.setTargetAtTime(vol, t, 0.2);
+        const d = Math.hypot(pos.x - L.x, pos.y - L.y, pos.z - L.z);
+        f.frequency.setTargetAtTime(19000 * Math.exp(-d / 350) + 500, t, 0.2);
+      },
+      stop: () => { try { g.gain.setTargetAtTime(0, c.currentTime, 0.3); src.stop(c.currentTime + 1.2); } catch (e) { /* stopped */ } },
+    };
   }
 
   buildGraph() {
@@ -481,7 +703,8 @@ export class AudioEngine {
     this.revIn = c.createConvolver();
     this.revIn.buffer = makeIR(c, 2.0, false);
     this.revOut = c.createConvolver();
-    this.revOut.buffer = makeIR(c, 2.6, true);
+    this.irDepot = makeIR(c, 2.6, true);
+    this.revOut.buffer = this.irDepot;
     this.revInGain = c.createGain(); this.revInGain.gain.value = 0.55;
     this.revOutGain = c.createGain(); this.revOutGain.gain.value = 0.7;
     this.revIn.connect(this.revInGain).connect(this.muffle);
@@ -527,7 +750,8 @@ export class AudioEngine {
    */
   play(name, opts = {}) {
     if (!this.ready || this.ctx.state !== 'running') return null;
-    const list = this.buffers[name];
+    let list = this.buffers[name];
+    if (!list || !list.length) list = this.buffers[FALLBACK[name]];
     if (!list || !list.length) return null;
     if (opts.priority === 'low' && this.active > 28) return null;
     if (this.active > 48) return null;
@@ -559,9 +783,9 @@ export class AudioEngine {
       const p = c.createPanner();
       p.panningModel = this.hrtf ? 'HRTF' : 'equalpower';
       p.distanceModel = 'inverse';
-      p.refDistance = opts.ref || 2;
-      p.rolloffFactor = opts.rolloff ?? 1;
-      p.maxDistance = 250;
+      p.refDistance = opts.distant ? Math.max(opts.ref || 2, 14) : opts.ref || 2;
+      p.rolloffFactor = opts.distant ? 0.55 : opts.rolloff ?? 1;
+      p.maxDistance = opts.distant ? 3000 : 250;
       if (p.positionX) { p.positionX.value = opts.pos.x; p.positionY.value = opts.pos.y; p.positionZ.value = opts.pos.z; }
       else p.setPosition(opts.pos.x, opts.pos.y, opts.pos.z);
       g.connect(p);
@@ -573,8 +797,9 @@ export class AudioEngine {
       const ind = opts.indoor ?? this.indoor;
       const sIn = c.createGain(), sOut = c.createGain();
       const far = Math.min(1, dist / 40);
+      const vast = opts.distant ? Math.min(1, dist / 400) : 0;
       sIn.gain.value = rev * ind * (1 + far);
-      sOut.gain.value = rev * (1 - ind) * (1 + far * 1.5);
+      sOut.gain.value = rev * (1 - ind) * (1 + far * 1.5 + vast * 2.5);
       out.connect(sIn).connect(this.revIn);
       out.connect(sOut).connect(this.revOut);
     }
@@ -632,16 +857,28 @@ export class AudioEngine {
     this.ambNodes = null;
   }
 
-  updateAmbience(dt, time, buzzLevel) {
+  updateAmbience(dt, time, buzzLevel, worldGust = 1) {
     const a = this.ambNodes;
     if (!a) return;
     const t = this.ctx.currentTime;
-    const gust = 0.55 + 0.45 * Math.sin(time * 0.13) * Math.sin(time * 0.071 + 1.3);
-    a.wind.g.gain.setTargetAtTime((0.5 - this.indoor * 0.32) * gust, t, 0.4);
-    a.bp.frequency.setTargetAtTime(300 + gust * 260, t, 0.5);
-    a.wg.gain.setTargetAtTime(this.indoor * 0.05 * gust, t, 0.5);
-    a.room.g.gain.setTargetAtTime(this.indoor * 0.22, t, 0.5);
-    if (a.buzz) a.buzz.g.gain.setTargetAtTime(0.05 * buzzLevel, t, 0.02);
+    const mtn = this.env === 'mountain';
+    const gust = (0.55 + 0.45 * Math.sin(time * 0.13) * Math.sin(time * 0.071 + 1.3)) * (mtn ? 0.6 + worldGust * 0.55 : 1);
+    a.wind.g.gain.setTargetAtTime((mtn ? 0.95 - this.indoor * 0.5 : 0.5 - this.indoor * 0.32) * gust, t, 0.4);
+    a.bp.frequency.setTargetAtTime((mtn ? 360 : 300) + gust * (mtn ? 420 : 260), t, 0.5);
+    a.wg.gain.setTargetAtTime((mtn ? 0.035 + this.indoor * 0.06 : this.indoor * 0.05) * gust, t, 0.5);
+    a.room.g.gain.setTargetAtTime(this.indoor * (mtn ? 0.08 : 0.22), t, 0.5);
+    if (a.gen) a.gen.g.gain.setTargetAtTime(mtn ? 0 : 0.35, t, 0.1);
+    if (a.buzz) a.buzz.g.gain.setTargetAtTime(mtn ? 0 : 0.05 * buzzLevel, t, 0.02);
+    if (mtn) {
+      const T = this.ambTimer;
+      T.rock = (T.rock ?? 20) - dt;
+      if (T.rock <= 0) {
+        T.rock = rand(25, 60);
+        const L = this.listener, a2 = rand(0, 6.28), d = rand(40, 160);
+        this.play('rockfall', { pos: { x: L.x + Math.cos(a2) * d, y: L.y + rand(5, 40), z: L.z + Math.sin(a2) * d }, volume: 0.5, ref: 12, reverb: 0.6, priority: 'low', distant: true });
+      }
+      return;
+    }
     const T = this.ambTimer;
     T.creak -= dt; T.drip -= dt; T.rumble -= dt;
     const L = this.listener;

@@ -1,11 +1,12 @@
 // First-person view model: rendered in its own scene (no wall clipping), lit to match the world
 // around the player, and animated procedurally (sway, bob, recoil springs, ADS, reloads, pump, switch).
 import * as THREE from 'three';
-import { buildRifle, buildPistol, buildShotgun, buildArms, poseArm, createWeaponMaterials } from './weaponModels.js';
+import { buildRifle, buildPistol, buildShotgun, buildSniper, buildDmr, buildBinoculars, buildBandage, buildArms, poseArm, createWeaponMaterials } from './weaponModels.js';
 import { Spring, lerp, clamp, damp, sampleTrack, easeInOutSine, rand } from './util.js';
 
 const V3 = () => new THREE.Vector3();
-const _v = V3(), _w = V3();
+const _v = V3(), _w = V3(), _ax = V3(), _bu = V3(), _bv = V3(), _cc = V3(), _yUp = new THREE.Vector3(0, 1, 0);
+const _qa = new THREE.Quaternion();
 
 // Reload keyframes, normalised time. Values are offsets (radians / metres).
 export const RELOAD_TRACKS = {
@@ -34,6 +35,16 @@ export const RELOAD_TRACKS = {
     emptySounds: [[0.8, 'slideRelease']],
   },
 };
+// bolt gun: detachable 5-round box, the bolt is cycled separately afterwards
+RELOAD_TRACKS.sniper = {
+  ...RELOAD_TRACKS.rifle,
+  magY: [[0, 0], [0.16, 0], [0.28, -0.3], [0.4, -0.3], [0.55, -0.04], [0.62, 0]],
+  magHidden: [0.28, 0.4],
+  chHand: null,
+  sounds: [[0.17, 'magOut'], [0.6, 'magIn']],
+  emptySounds: [],
+};
+RELOAD_TRACKS.dmr = { ...RELOAD_TRACKS.rifle };
 
 export class ViewModel {
   constructor(tf, T, envMap) {
@@ -43,7 +54,10 @@ export class ViewModel {
     this.root = new THREE.Group();
     this.scene.add(this.root);
     this.M = createWeaponMaterials(T);
-    this.weapons = { rifle: buildRifle(this.M), pistol: buildPistol(this.M), shotgun: buildShotgun(this.M) };
+    this.weapons = {
+      rifle: buildRifle(this.M), pistol: buildPistol(this.M), shotgun: buildShotgun(this.M),
+      sniper: buildSniper(this.M), dmr: buildDmr(this.M), binos: buildBinoculars(this.M), bandage: buildBandage(this.M),
+    };
     for (const w of Object.values(this.weapons)) {
       w.group.visible = false;
       w.adsPos = new THREE.Vector3(-w.sight.x, -w.sight.y, -w.adsDist - w.sight.z);
@@ -108,6 +122,7 @@ export class ViewModel {
     if (w.parts.slide) w.parts.slide.position.copy(w.slideRest);
     if (w.parts.pump) w.parts.pump.position.copy(w.pumpRest);
     if (w.parts.shell) w.parts.shell.visible = false;
+    if (w.parts.bolt) { w.parts.bolt.position.copy(w.boltRest); w.parts.bolt.rotation.set(0, 0, 0); }
   }
 
   kick(k, adsBlend) {
@@ -119,7 +134,8 @@ export class ViewModel {
     this.flashT = 0.034;
     this.flashGroup.visible = true;
     this.flashGroup.rotation.z = Math.random() * Math.PI * 2;
-    const sc = rand(0.75, 1.25) * (this.current.id === 'shotgun' ? 1.5 : this.current.id === 'pistol' ? 0.8 : 1);
+    const id = this.current.id;
+    const sc = rand(0.75, 1.25) * (id === 'shotgun' ? 1.5 : id === 'pistol' ? 0.8 : id === 'sniper' ? 1.35 : id === 'dmr' ? 1.2 : 1);
     this.flashGroup.scale.set(sc, sc, sc * rand(0.8, 1.3));
     this.flashFront.visible = adsBlend < 0.7 || Math.random() < 0.5;
     this.flashLight.intensity = 2.2;
@@ -239,8 +255,8 @@ export class ViewModel {
     w.group.rotation.set(rx, ry, rz, 'XYZ');
 
     // arms
-    const L = this.anim.leftHand, R = w.rightHand;
-    poseArm(this.arms.right, R, w.rightElbow, w.rightHandRot);
+    const L = this.anim.leftHand, R = this.anim.rightHand;
+    poseArm(this.arms.right, R, w.rightElbow, this.anim.rightRot);
     poseArm(this.arms.left, L, w.leftElbow, this.anim.leftRot);
 
     // flash
@@ -254,24 +270,28 @@ export class ViewModel {
   }
 
   animateParts(st, w) {
-    const A = this.anim || (this.anim = { px: 0, py: 0, rx: 0, rz: 0, leftHand: V3(), leftRot: new THREE.Euler() });
+    const A = this.anim || (this.anim = { px: 0, py: 0, rx: 0, rz: 0, leftHand: V3(), leftRot: new THREE.Euler(), rightHand: V3(), rightRot: new THREE.Euler() });
     A.px = A.py = A.rx = A.rz = 0;
     A.leftHand.copy(w.leftHand);
     A.leftRot.copy(w.leftHandRot);
-    if (w.id === 'rifle' || w.id === 'pistol') {
+    A.rightHand.copy(w.rightHand);
+    A.rightRot.copy(w.rightHandRot);
+    if (w.id === 'rifle' || w.id === 'pistol' || w.rifleLike) {
       const T = RELOAD_TRACKS[w.id];
       const mag = w.parts.mag;
+      const rifle = w.id !== 'pistol';
+      const magLen = w.id === 'sniper' ? 0.07 : 0.16;
       if (st.reload >= 0) {
         const t = st.reload;
         A.rz = sampleTrack(T.rotZ, t); A.rx = sampleTrack(T.rotX, t);
         A.px = sampleTrack(T.posX, t); A.py = sampleTrack(T.posY, t);
         const my = sampleTrack(T.magY, t);
-        mag.position.set(w.magRest.x, w.magRest.y + my, w.magRest.z + my * (w.id === 'rifle' ? -0.12 : 0.1));
+        mag.position.set(w.magRest.x, w.magRest.y + my, w.magRest.z + my * (rifle ? -0.12 : 0.1));
         mag.visible = !(t > T.magHidden[0] && t < T.magHidden[1]);
         const hk = sampleTrack(T.hand, t);
-        const magBottom = _v.set(mag.position.x, mag.position.y - (w.id === 'rifle' ? 0.16 : 0.1), mag.position.z + (w.id === 'rifle' ? -0.035 : 0.01));
+        const magBottom = _v.set(mag.position.x, mag.position.y - (rifle ? magLen : 0.1), mag.position.z + (rifle ? -0.035 : 0.01));
         A.leftHand.lerp(magBottom.add(_w.set(-0.005, -0.01, 0.01)), hk);
-        if (w.id === 'rifle' && st.reloadEmpty && T.chHand) {
+        if (w.parts.charging && st.reloadEmpty && T.chHand) {
           const ck = sampleTrack(T.chHand, t);
           const pull = sampleTrack(T.chPull, t);
           w.parts.charging.position.set(w.chRest.x, w.chRest.y, w.chRest.z + pull);
@@ -285,6 +305,9 @@ export class ViewModel {
       if (w.id === 'pistol') {
         w.parts.slide.position.set(0, 0, w.slideRest.z + st.slideBack * 0.045);
       }
+      if (w.parts.bolt) this.animateBolt(st, w, A);
+    } else if (w.id === 'bandage') {
+      this.animateBandage(st, w, A);
     } else if (w.id === 'shotgun') {
       const pump = w.parts.pump, shell = w.parts.shell;
       let pz = 0;
@@ -310,5 +333,56 @@ export class ViewModel {
         }
       }
     }
+  }
+
+  /** Bolt cycle: lift, draw back (ejecting), drive home, lock down, with the firing hand on the knob. */
+  animateBolt(st, w, A) {
+    const bolt = w.parts.bolt, b = st.bolt;
+    if (b < 0) { bolt.rotation.z = 0; bolt.position.copy(w.boltRest); return; }
+    const rot = sampleTrack([[0, 0], [0.18, 1.15], [0.74, 1.15], [0.9, 0]], b);
+    const back = sampleTrack([[0.18, 0], [0.4, 0.088], [0.52, 0.088], [0.74, 0]], b);
+    bolt.rotation.z = rot;
+    bolt.position.set(w.boltRest.x, w.boltRest.y, w.boltRest.z + back);
+    const c = Math.cos(rot), s2 = Math.sin(rot);
+    const kx = 0.046, ky = -0.024;
+    _v.set(kx * c - ky * s2, kx * s2 + ky * c, 0.02).add(bolt.position);
+    const hk = sampleTrack([[0, 0], [0.1, 1], [0.9, 1], [1, 0]], b);
+    A.rightHand.lerp(_v.add(_w.set(0.012, -0.012, 0.02)), hk);
+    A.rightRot.set(lerp(w.rightHandRot.x, 0.2, hk), 0, lerp(0, 0.9, hk));
+    A.rz += 0.09 * hk;
+    A.rx += 0.025 * hk;
+    A.py -= 0.01 * hk;
+  }
+
+  /** Field dressing: the free hand wraps gauze around the raised forearm. */
+  animateBandage(st, w, A) {
+    const k = st.bandage;
+    const { roll, wrap, pack } = w.parts;
+    _ax.subVectors(w.leftHand, w.leftElbow).normalize();
+    const c = _cc.copy(w.leftElbow).lerp(w.leftHand, 0.62);
+    _bu.crossVectors(_ax, _yUp).normalize();
+    _bv.crossVectors(_ax, _bu).normalize();
+    if (k < 0) {
+      roll.position.copy(w.rightHand).add(_v.set(-0.01, 0.03, -0.02));
+      wrap.visible = false;
+      pack.visible = true;
+      pack.position.set(0.05, -0.06, -0.05);
+      return;
+    }
+    const a = k * Math.PI * 2 * 4.5;
+    const r = 0.068;
+    _v.copy(c).addScaledVector(_bu, Math.cos(a) * r).addScaledVector(_bv, Math.sin(a) * r).addScaledVector(_ax, (k - 0.5) * 0.07);
+    A.rightHand.copy(_v).add(_w.set(0.02, -0.02, 0.03));
+    A.rightRot.set(0.3, 0, -0.4 + Math.sin(a) * 0.4);
+    roll.position.copy(_v);
+    _qa.setFromUnitVectors(_yUp, _ax);
+    roll.quaternion.copy(_qa);
+    roll.scale.setScalar(Math.max(0.35, 1 - k * 0.6));
+    wrap.visible = k > 0.05;
+    wrap.position.copy(c);
+    wrap.quaternion.copy(_qa);
+    wrap.scale.set(1, clamp((k - 0.05) * 1.3, 0.01, 1), 1);
+    pack.visible = k < 0.12;
+    A.py = Math.sin(a * 0.5) * 0.004;
   }
 }

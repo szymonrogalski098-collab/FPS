@@ -31,21 +31,31 @@ const PALETTES = {
   rookie: { jacket: 0x4b4e44, pants: 0x57523f, vest: 0x3b3c35, glove: 0x2a2826, boot: 0x2c2721, face: 0x2e2e2c, helmet: 0x333532, pouch: 0x34352f },
   regular: { jacket: 0x6d6450, pants: 0x605846, vest: 0x5a4f39, glove: 0x3a332a, boot: 0x3a3128, face: 0x3a3833, helmet: 0x555945, pouch: 0x4d4431 },
   veteran: { jacket: 0x2f3133, pants: 0x2c2e30, vest: 0x1f2123, glove: 0x1c1c1c, boot: 0x1e1c1a, face: 0x222222, helmet: 0x2b2c2d, pouch: 0x252729 },
+  friendly: { jacket: 0x7a7458, pants: 0x6c6850, vest: 0x7b6a4c, glove: 0x4a4034, boot: 0x5a4a38, face: 0x9c7a5e, helmet: 0x6e664f, pouch: 0x6f6045 },
 };
+// hill fighters: every man dressed differently (tunic, trousers, headwear, shawl)
+const TUNICS = [0xb3ab98, 0x8a857a, 0x6e604c, 0x5f5d48, 0x464540, 0x9a8b70, 0x7d7462];
+const SHAWLS = [0x6b5a44, 0x8b7a60, 0x5a5550, 0x7a6a50, 0x4f463a];
+const HEADWEAR = [0x8a7d66, 0xd8d2c4, 0x2a2826, 0x6d6352, 0xa89f8c];
+const SKIN = [0x8a6a52, 0x7a5c46, 0x9a765a, 0x6e5240];
 
-let sharedMat = null, sharedRifleMat = null, rifleGeo = null;
+let sharedMat = null, sharedRifleMat = null;
+const rifleGeos = {};
 
-function getMaterials(T) {
+function getMaterials(T, kind) {
   if (!sharedMat) {
     const map = T.fabric.map.clone(); map.repeat.set(5, 5); map.needsUpdate = true;
     const nrm = T.fabric.normalMap.clone(); nrm.repeat.set(5, 5); nrm.needsUpdate = true;
     sharedMat = patchAmbient(new THREE.MeshStandardMaterial({ vertexColors: true, map, normalMap: nrm, roughness: 0.92, metalness: 0 }));
     sharedMat.userData.surface = 'flesh';
+    sharedMat.userData.heat = 'body';
     sharedRifleMat = patchAmbient(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.55 }));
-    rifleGeo = buildEnemyRifleGeometry();
+    sharedRifleMat.userData.heat = 'metal';
   }
-  return { mat: sharedMat, rifleMat: sharedRifleMat, rifleGeo };
+  if (!rifleGeos[kind]) rifleGeos[kind] = buildEnemyRifleGeometry(kind);
+  return { mat: sharedMat, rifleMat: sharedRifleMat, rifle: rifleGeos[kind] };
 }
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
 function part(geo, bone, color, x, y, z, rx = 0, ry = 0, rz = 0) {
   geo.applyMatrix4(new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(1, 1, 1)));
@@ -73,8 +83,17 @@ const jitter = (hex, k = 0.06) => {
 };
 
 export function createSoldier(T, profile) {
-  const { mat, rifleMat, rifleGeo: rg } = getMaterials(T);
-  const P = PALETTES[profile.palette] || PALETTES.regular;
+  const { mat, rifleMat, rifle: rg } = getMaterials(T, profile.weapon || 'm4');
+  const fighter = profile.outfit === 'fighter';
+  let P = PALETTES[profile.palette] || PALETTES.regular;
+  if (fighter) {
+    const tunic = pick(TUNICS);
+    P = {
+      jacket: tunic, pants: Math.random() < 0.6 ? tunic : pick(TUNICS), vest: pick([0x4b4535, 0x3e3a30, 0x55503c, 0x5a5040]), glove: pick(SKIN),
+      boot: pick([0x3a3128, 0x2b2622, 0x4a3f33]), face: pick(SKIN), helmet: pick(HEADWEAR), pouch: pick([0x4d4431, 0x3a372e, 0x58513e]),
+      shawl: pick(SHAWLS), beard: pick([0x1f1a16, 0x2b231c, 0x3a3128, 0x1a1816]),
+    };
+  }
   const c = Object.fromEntries(Object.entries(P).map(([k, v]) => [k, jitter(v)]));
   const parts = [];
   const add = (...a) => parts.push(part(...a));
@@ -102,18 +121,57 @@ export function createSoldier(T, profile) {
   add(box(0.3, 0.26, 0.08), 'chest', c.pouch, 0, 1.32, -0.18);
   add(box(0.06, 0.1, 0.06), 'chest', c.pouch, 0.2, 1.24, 0.02);
   for (const s of [1, -1]) add(new THREE.SphereGeometry(0.082, 8, 6), 'chest', c.jacket, s * 0.2, 1.44, 0);
+  if (fighter) {
+    // knee-length tunic over the trousers, shawl over the shoulders
+    const skirt = new THREE.CylinderGeometry(0.19, 0.25, 0.44, 12, 1, true);
+    add(skirt, 'hips', c.jacket, 0, 0.8, 0.0);
+    const shawl = new THREE.CylinderGeometry(0.2, 0.25, 0.16, 12, 1, true); shawl.scale(1.1, 1, 0.85);
+    add(shawl, 'chest', c.shawl, 0, 1.46, 0);
+    add(box(0.36, 0.05, 0.22), 'chest', c.shawl, 0, 1.52, -0.01);
+  } else if (profile.palette === 'friendly') {
+    add(box(0.28, 0.34, 0.14), 'chest', c.pouch, 0, 1.3, -0.24);
+    add(box(0.24, 0.1, 0.1), 'chest', c.vest, 0, 1.47, -0.22);
+    add(box(0.05, 0.3, 0.03), 'chest', c.vest, 0.12, 1.3, -0.16);
+    add(box(0.05, 0.3, 0.03), 'chest', c.vest, -0.12, 1.3, -0.16);
+  }
   // head
   add(new THREE.CylinderGeometry(0.056, 0.06, 0.11, 8), 'neck', c.face, 0, 1.56, 0);
   const head = new THREE.SphereGeometry(0.1, 14, 12); head.scale(0.9, 1.1, 1.0);
   add(head, 'head', c.face, 0, 1.665, 0.01);
   const gog = new THREE.CapsuleGeometry(0.022, 0.1, 3, 8); gog.rotateZ(Math.PI / 2);
-  add(gog, 'head', 0x111111, 0, 1.678, 0.083);
-  if (profile.helmet) {
+  if (!fighter) add(gog, 'head', 0x111111, 0, 1.678, 0.083);
+  if (fighter) {
+    const beard = new THREE.SphereGeometry(0.075, 10, 8); beard.scale(1.05, 0.9, 0.75);
+    add(beard, 'head', c.beard, 0, 1.6, 0.05);
+    const style = Math.random();
+    if (style < 0.45) {
+      // pakol: rolled wool cap
+      add(new THREE.CylinderGeometry(0.105, 0.108, 0.06, 14), 'head', c.helmet, 0, 1.745, -0.005);
+      add(new THREE.TorusGeometry(0.1, 0.028, 8, 16).rotateX(Math.PI / 2), 'head', c.helmet, 0, 1.73, -0.005);
+    } else if (style < 0.85) {
+      // wrapped turban with a hanging tail
+      const t1 = new THREE.SphereGeometry(0.125, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.55); t1.scale(1.05, 0.9, 1.1);
+      add(t1, 'head', c.helmet, 0, 1.69, -0.005);
+      add(new THREE.TorusGeometry(0.108, 0.03, 8, 18).rotateX(Math.PI / 2 - 0.15), 'head', c.helmet, 0, 1.715, 0);
+      add(box(0.07, 0.22, 0.02), 'neck', c.helmet, 0.05, 1.5, -0.12, 0.2, 0, 0.1);
+    } else {
+      // scarf wrapped over the head and face
+      const b = new THREE.SphereGeometry(0.114, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.62); b.scale(1, 1.05, 1.08);
+      add(b, 'head', c.shawl, 0, 1.68, 0.0);
+      add(box(0.17, 0.07, 0.1), 'head', c.shawl, 0, 1.61, 0.05);
+    }
+  } else if (profile.helmet) {
     const h = new THREE.SphereGeometry(0.123, 16, 10, 0, Math.PI * 2, 0, Math.PI * 0.56); h.scale(1, 0.95, 1.1);
     add(h, 'head', c.helmet, 0, 1.685, -0.008);
     add(box(0.045, 0.035, 0.025), 'head', 0x1c1c1c, 0, 1.765, 0.118);
     add(box(0.018, 0.05, 0.1), 'head', c.helmet, 0.118, 1.69, -0.01);
     add(box(0.018, 0.05, 0.1), 'head', c.helmet, -0.118, 1.69, -0.01);
+    if (profile.palette === 'friendly') {
+      add(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 10).rotateZ(Math.PI / 2), 'head', 0x2a2a28, 0.12, 1.665, 0.0);
+      add(new THREE.CylinderGeometry(0.035, 0.035, 0.03, 10).rotateZ(Math.PI / 2), 'head', 0x2a2a28, -0.12, 1.665, 0.0);
+      add(box(0.05, 0.025, 0.04), 'head', 0x2a2a28, 0, 1.79, 0.1);
+      add(box(0.09, 0.05, 0.05), 'head', c.pouch, 0, 1.74, -0.12);
+    }
   } else {
     const b = new THREE.SphereGeometry(0.108, 14, 8, 0, Math.PI * 2, 0, Math.PI * 0.5); b.scale(1, 1.05, 1.05);
     add(b, 'head', c.helmet, 0, 1.69, 0.005);
@@ -144,11 +202,11 @@ export function createSoldier(T, profile) {
   const holder = new THREE.Group();
   holder.position.set(-0.1, 0.06, 0.3);
   B.chest.add(holder);
-  const rifle = new THREE.Mesh(rg, rifleMat);
+  const rifle = new THREE.Mesh(rg.geometry, rifleMat);
   rifle.rotation.y = Math.PI;
   rifle.castShadow = true;
   holder.add(rifle);
-  return { mesh, bones: B, holder, rifle, rest: bones.map((b) => b.position.clone()) };
+  return { mesh, bones: B, holder, rifle, muzzle: rg.muzzle, rest: bones.map((b) => b.position.clone()) };
 }
 
 // ------------------------------------------------------------------ IK

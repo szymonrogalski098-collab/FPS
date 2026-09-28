@@ -380,6 +380,15 @@ export class Effects {
   impact(point, normal, surface, dir, opts = {}) {
     const L = this.lightAt(point.x, point.y, point.z);
     const big = opts.big ? 1.6 : 1;
+    // natural ground: stone chips like concrete, soil / grass / scree kick up dust
+    if (surface === 'rock') {
+      this.puff(point, normal, Math.floor(4 * big), [0.5 * L, 0.46 * L, 0.4 * L], 0.24, 1.5);
+      for (let i = 0; i < 10 * big; i++) this.debris(point, normal, [0.34 * L, 0.31 * L, 0.27 * L], 0.018);
+      if (Math.random() < 0.35) this.spark(point, normal, dir, 0.5);
+      if (!opts.quiet) this.audio.play('impact_concrete', { pos: point, volume: opts.volume ?? 0.75, ref: 2.5, reverb: 0.3, rateVar: 0.12, rate: 0.9, priority: 'low', occluded: opts.occluded });
+      return;
+    }
+    if (surface === 'gravel' || surface === 'grass') surface = 'dirt';
     if (surface === 'metal') {
       this.decals.add(point, normal, 'metal', rand(0.05, 0.07));
       const n = Math.floor(rand(7, 13) * big);

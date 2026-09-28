@@ -30,7 +30,7 @@ export const WEAPONS = {
     recoil: { up: 0.6, upGrow: 0.06, upMax: 1.05, side: 0.24, drift: 0.05, recover: 7, permanent: 0.38, punch: 1.1, adsMul: 0.8, crouchMul: 0.85 },
     kick: { z: 0.034, rotX: 2.6, rotY: 0.8, rotZ: 1.8 },
     adsZoom: 1.3, adsTime: 0.2, moveMul: 0.95, switchTime: 0.42, sprintOutTime: 0.17,
-    sound: 'rifle', shell: 'brass', noise: 48,
+    sound: 'rifle', shell: 'brass', noise: 48, velocity: 900, drag: 0.0011,
   },
   pistol: {
     id: 'pistol', slot: 2, name: 'P9 COMPACT', short: 'P9', caliber: '9mm',
@@ -42,7 +42,7 @@ export const WEAPONS = {
     recoil: { up: 1.8, upGrow: 0.1, upMax: 2.4, side: 0.5, drift: 0, recover: 10, permanent: 0.3, punch: 1.3, adsMul: 0.85, crouchMul: 0.9 },
     kick: { z: 0.045, rotX: 7, rotY: 1.2, rotZ: 2.5 },
     adsZoom: 1.12, adsTime: 0.15, moveMul: 1.0, switchTime: 0.32, sprintOutTime: 0.12,
-    sound: 'pistol', shell: 'brass9', noise: 38,
+    sound: 'pistol', shell: 'brass9', noise: 38, velocity: 360, drag: 0.0025, mountainNoise: 260,
   },
   shotgun: {
     id: 'shotgun', slot: 3, name: 'BREACHER 12', short: 'B12', caliber: '12ga',
@@ -54,11 +54,46 @@ export const WEAPONS = {
     recoil: { up: 4.4, upGrow: 0, upMax: 4.4, side: 0.9, drift: 0, recover: 5, permanent: 0.45, punch: 1.6, adsMul: 0.85, crouchMul: 0.85 },
     kick: { z: 0.075, rotX: 9, rotY: 1.8, rotZ: 3 },
     adsZoom: 1.15, adsTime: 0.24, moveMul: 0.92, switchTime: 0.5, sprintOutTime: 0.2,
-    sound: 'shotgun', shell: 'shell12', noise: 55,
+    sound: 'shotgun', shell: 'shell12', noise: 55, velocity: 400, drag: 0.004,
+  },
+  sniper: {
+    id: 'sniper', slot: 1, name: 'SR-7 BOLT', short: 'SR-7', caliber: '7.62×51', model: 'sniper',
+    auto: false, bolt: true, rpm: 60, pellets: 1,
+    damage: 118, headMult: 3.2, limbMult: 0.7, range: 1500,
+    velocity: 820, drag: 0.00062, mag: 5, reserve: 30, chamber: false,
+    reloadTime: 3.3, reloadEmptyTime: 3.8, boltTime: 0.95,
+    spread: { hip: 4.2, ads: 0.017, move: 3.2, adsMove: 1.4, air: 9, crouchMul: 0.8, bloomPerShot: 0, bloomMax: 0 },
+    recoil: { up: 3.4, upGrow: 0, upMax: 3.4, side: 0.7, drift: 0, recover: 3.6, permanent: 0.3, punch: 1.5, adsMul: 0.75, crouchMul: 0.85 },
+    kick: { z: 0.085, rotX: 7.5, rotY: 1.6, rotZ: 3.2 },
+    scope: { min: 4, max: 12, zoom: 6, step: 1, reticle: 'mil', tube: 0.86 }, zero: { value: 300, min: 100, max: 1000, step: 100 },
+    sway: 1.0, adsZoom: 6, adsTime: 0.36, moveMul: 0.88, switchTime: 0.72, sprintOutTime: 0.3,
+    sound: 'sniper', shell: 'brass762', noise: 48, mountainNoise: 900,
+  },
+  dmr: {
+    id: 'dmr', slot: 2, name: 'DM-14 MARKSMAN', short: 'DM-14', caliber: '7.62×51', model: 'dmr',
+    auto: false, rpm: 320, pellets: 1,
+    damage: 74, headMult: 3.2, limbMult: 0.75, range: 1200,
+    velocity: 790, drag: 0.00068, mag: 20, reserve: 80, chamber: true,
+    reloadTime: 2.6, reloadEmptyTime: 3.1,
+    spread: { hip: 3.0, ads: 0.03, move: 2.8, adsMove: 1.1, air: 7, crouchMul: 0.8, bloomPerShot: 0.05, bloomMax: 0.3 },
+    recoil: { up: 1.9, upGrow: 0.1, upMax: 2.4, side: 0.45, drift: 0, recover: 5.5, permanent: 0.32, punch: 1.3, adsMul: 0.8, crouchMul: 0.85 },
+    kick: { z: 0.06, rotX: 5.2, rotY: 1.2, rotZ: 2.4 },
+    scope: { min: 4, max: 4, zoom: 4, step: 0, reticle: 'chevron', tube: 0.8 }, zero: { value: 200, min: 100, max: 800, step: 100 },
+    sway: 0.8, adsZoom: 4, adsTime: 0.3, moveMul: 0.9, switchTime: 0.55, sprintOutTime: 0.24,
+    sound: 'dmr', shell: 'brass762', noise: 48, mountainNoise: 800,
   },
 };
 
+/** Handheld optics (not weapons): laser-rangefinding binoculars with a clip-on thermal channel. */
+export const BINOCULARS = { zoom: 7, thermalZoom: 5, raiseTime: 0.4, sway: 0.55 };
+
+export const MODES = {
+  depot: { loadout: ['rifle', 'pistol', 'shotgun'] },
+  mountain: { loadout: ['sniper', 'dmr', 'pistol'], time: 600, bandages: 4, bandageTime: 4.2, bandageHeal: 38, reserve: { pistol: 45 } },
+};
+
 export const WEAPON_ORDER = ['rifle', 'pistol', 'shotgun'];
+export const GRAVITY = 9.81;
 
 export const ENEMY_PROFILES = {
   rookie: {
@@ -73,6 +108,37 @@ export const ENEMY_PROFILES = {
     hp: 120, spread: 2.4, reaction: [0.35, 0.6], burst: [3, 5], burstGap: [0.35, 0.65],
     rpm: 720, damage: 15, detectRate: 1.25, fov: 130, palette: 'veteran', aggression: 0.7, helmet: true,
   },
+  // --- Mountain Survival (long-range, ballistic). spread is in degrees before the settle multiplier.
+  fighter: {
+    hp: 100, spread: 0.85, reaction: [0.7, 1.3], burst: [2, 5], burstGap: [0.6, 1.4], mag: 30,
+    rpm: 600, damage: 29, detectRate: 1.0, fov: 120, palette: 'fighter', outfit: 'fighter', aggression: 0.55, helmet: false,
+    weapon: 'ak', velocity: 715, drag: 0.0011, range: 700, sightRange: 430, detectRange: 70, minDetect: 0.07, noise: 650,
+    rangeErr: 0.14, lead: 0.55,
+  },
+  veteranFighter: {
+    hp: 115, spread: 0.65, reaction: [0.5, 0.9], burst: [3, 7], burstGap: [0.5, 1.1], mag: 45,
+    rpm: 650, damage: 31, detectRate: 1.15, fov: 125, palette: 'fighterB', outfit: 'fighter', aggression: 0.68, helmet: false,
+    weapon: 'ak', velocity: 730, drag: 0.001, range: 800, sightRange: 480, detectRange: 80, minDetect: 0.08, noise: 700,
+    rangeErr: 0.1, lead: 0.7,
+  },
+  marksman: {
+    hp: 100, spread: 0.16, reaction: [1.2, 2.0], burst: [1, 1], burstGap: [2.4, 4.2], mag: 10,
+    rpm: 120, damage: 58, detectRate: 1.2, fov: 110, palette: 'marksman', outfit: 'fighter', aggression: 0.35, helmet: false,
+    weapon: 'svd', velocity: 830, drag: 0.0007, range: 1100, sightRange: 680, detectRange: 115, minDetect: 0.09, noise: 850,
+    rangeErr: 0.06, lead: 0.8,
+  },
+  friendly: {
+    hp: 150, spread: 0.22, reaction: [0.45, 0.8], burst: [2, 4], burstGap: [0.45, 1.0], mag: 30,
+    rpm: 720, damage: 38, detectRate: 1.15, fov: 130, palette: 'friendly', outfit: 'friendly', aggression: 0.55, helmet: true,
+    weapon: 'm4', velocity: 880, drag: 0.0011, range: 700, sightRange: 520, detectRange: 95, minDetect: 0.09, noise: 600,
+    rangeErr: 0.07, lead: 0.8,
+  },
+  friendlyMarksman: {
+    hp: 150, spread: 0.07, reaction: [0.8, 1.4], burst: [1, 1], burstGap: [1.3, 2.6], mag: 20,
+    rpm: 200, damage: 70, detectRate: 1.3, fov: 125, palette: 'friendly', outfit: 'friendly', aggression: 0.4, helmet: true,
+    weapon: 'dmr', velocity: 800, drag: 0.0007, range: 1100, sightRange: 720, detectRange: 125, minDetect: 0.1, noise: 800,
+    rangeErr: 0.04, lead: 0.85,
+  },
 };
 
 export const DIFFICULTY = {
@@ -85,7 +151,8 @@ export const PLAYER = {
   radius: 0.3,
   standHeight: 1.8, crouchHeight: 1.2,
   standEye: 1.64, crouchEye: 1.08,
-  walkSpeed: 3.4, sprintSpeed: 5.9, crouchSpeed: 1.7, adsSpeedMul: 0.6,
+  walkSpeed: 3.4, sprintSpeed: 5.9, crouchSpeed: 1.7, proneSpeed: 0.75, adsSpeedMul: 0.6,
+  proneHeight: 0.55, proneEye: 0.32, maxSlope: 0.4, slideSlope: 0.52,
   accel: 11, airAccel: 1.6, jumpVel: 4.1, gravity: 9.81 * 1.25,
   stepUp: 0.42, leanDist: 0.36, leanRoll: 11,
   maxHealth: 100,

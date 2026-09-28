@@ -12,7 +12,7 @@ export const SUN_DIR = new THREE.Vector3(-0.55, 0.42, 0.72).normalize();
 export const BOUNDS = { minX: -26, maxX: 26, minZ: -20, maxZ: 26 };
 export const BUILDING = { minX: -18, maxX: 18, minZ: -16, maxZ: 8 };
 
-const AMBIENT_ZONES = [
+export const AMBIENT_ZONES = [
   { min: [-17.85, -1, -15.85], max: [5.9, 7.45, 7.85], value: 0.42, soft: 1.4 },   // main hall
   { min: [6.1, -1, -15.85], max: [17.85, 3.6, 7.85], value: 0.2, soft: 0.8 },      // east wing
   { min: [-17.85, -1, -15.85], max: [-11.2, 2.9, -2.2], value: 0.2, soft: 1.2 },   // under mezzanine

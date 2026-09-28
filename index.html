@@ -31,6 +31,46 @@
 
   <!-- ============================== HUD -->
   <div id="hud" class="hidden">
+    <div id="optic" class="hidden">
+      <svg id="optic-svg" preserveAspectRatio="none">
+        <defs>
+          <radialGradient id="optic-vig" r="50%">
+            <stop offset="0.72" stop-color="#000" stop-opacity="0"/>
+            <stop offset="0.93" stop-color="#000" stop-opacity="0.45"/>
+            <stop offset="1" stop-color="#000" stop-opacity="0.92"/>
+          </radialGradient>
+        </defs>
+        <circle id="optic-ring" fill="url(#optic-vig)"/>
+        <path id="optic-mask" fill="#030303" fill-rule="evenodd"/>
+        <g id="optic-reticles">
+          <g id="ret-mil" stroke="#050505" fill="#050505">
+            <path d="M-300,0 H-150 M150,0 H300 M0,-300 V-150 M0,150 V300" stroke-width="9"/>
+            <path d="M-150,0 H-4 M4,0 H150 M0,-150 V-4 M0,4 V150" stroke-width="1.4"/>
+            <g stroke="none">
+              <circle cx="-120" cy="0" r="2.6"/><circle cx="-96" cy="0" r="2.6"/><circle cx="-72" cy="0" r="2.6"/><circle cx="-48" cy="0" r="2.6"/><circle cx="-24" cy="0" r="2.6"/>
+              <circle cx="24" cy="0" r="2.6"/><circle cx="48" cy="0" r="2.6"/><circle cx="72" cy="0" r="2.6"/><circle cx="96" cy="0" r="2.6"/><circle cx="120" cy="0" r="2.6"/>
+              <circle cx="0" cy="24" r="2.6"/><circle cx="0" cy="48" r="2.6"/><circle cx="0" cy="72" r="2.6"/><circle cx="0" cy="96" r="2.6"/><circle cx="0" cy="120" r="2.6"/>
+              <circle cx="0" cy="-24" r="2.6"/><circle cx="0" cy="-48" r="2.6"/><circle cx="0" cy="-72" r="2.6"/><circle cx="0" cy="-96" r="2.6"/><circle cx="0" cy="-120" r="2.6"/>
+            </g>
+          </g>
+          <g id="ret-chevron" fill="none">
+            <path d="M-300,0 H-60 M60,0 H300 M0,300 V60" stroke="#070707" stroke-width="3"/>
+            <path d="M-11,11 L0,0 L11,11" stroke="#b8321f" stroke-width="3.2" stroke-linejoin="miter"/>
+            <path d="M-9,40 H9 M-7,68 H7 M-6,96 H6 M-5,124 H5" stroke="#070707" stroke-width="2"/>
+            <text x="14" y="44" fill="#070707" font-size="13" font-family="Barlow Condensed">4</text>
+            <text x="12" y="72" fill="#070707" font-size="13" font-family="Barlow Condensed">5</text>
+            <text x="11" y="100" fill="#070707" font-size="13" font-family="Barlow Condensed">6</text>
+            <text x="10" y="128" fill="#070707" font-size="13" font-family="Barlow Condensed">7</text>
+          </g>
+          <g id="ret-binos" stroke="rgba(10,10,10,0.8)" fill="none" stroke-width="1.3">
+            <path d="M-180,0 H-12 M12,0 H180 M0,-120 V-12 M0,12 V120"/>
+            <path d="M-150,-5 V5 M-120,-4 V4 M-90,-5 V5 M-60,-4 V4 M-30,-5 V5 M30,-5 V5 M60,-4 V4 M90,-5 V5 M120,-4 V4 M150,-5 V5"/>
+            <rect x="-7" y="-7" width="14" height="14" stroke="rgba(190,40,25,0.95)" stroke-width="1.6"/>
+          </g>
+        </g>
+      </svg>
+      <div id="optic-info"><span id="o-zoom"></span><span id="o-zero"></span><span id="o-range"></span><span id="o-head"></span></div>
+    </div>
     <div id="dmg-overlay"></div>
     <div id="dmg-dirs"></div>
     <div id="crosshair"><i class="ch-t"></i><i class="ch-b"></i><i class="ch-l"></i><i class="ch-r"></i><i class="ch-dot"></i></div>
@@ -44,6 +84,16 @@
 
     <canvas id="minimap" width="160" height="160"></canvas>
 
+    <div id="hud-timer" class="m-only"><div class="label">Exfil in</div><div id="timer-val">10:00</div></div>
+    <div id="hud-compass" class="m-only"><div class="cwin"><div id="compass-strip"></div></div><i class="needle"></i><div id="compass-deg">000</div></div>
+    <div id="hud-team" class="m-only"></div>
+    <div id="radio-log" class="m-only"></div>
+    <div id="hud-med" class="m-only">
+      <div class="label">Dressings <b id="med-val">4</b></div>
+      <div id="med-bleed">BLEEDING · H to dress</div>
+      <div class="prog"><div id="med-fill"></div></div>
+    </div>
+
     <div id="hud-health">
       <div class="label">Health</div>
       <div class="row"><span id="hp-value">100</span><div class="bar"><div id="hp-trail"></div><div id="hp-fill"></div></div></div>
@@ -54,6 +104,7 @@
       <div class="ammo"><span id="ammo-mag">30</span><span class="sep">/</span><span id="ammo-res">120</span></div>
       <div id="wpn-mode">AUTO</div>
       <div id="wpn-slots"><span data-slot="1">1</span><span data-slot="2">2</span><span data-slot="3">3</span></div>
+      <div id="wpn-keys" class="m-only">B binoculars · T thermal · H dress · Z prone</div>
     </div>
 
     <div id="obj-marker"><div class="diamond"></div><div class="dist">24 m</div></div>
@@ -76,6 +127,12 @@
     <button class="tbtn t-sprint" data-act="sprint" data-mode="toggle" aria-label="Sprint"><svg viewBox="0 0 24 24"><circle cx="14" cy="4.5" r="2.3"/><path d="M9.5 8.5l4-1.2 2.3 3.6 3.2.9-.6 1.9-4-1.1-1.1-1.6-1.3 3.4 2.8 2.4V22h-2v-4.3l-3.3-2.5-1.4 3.4L4 17.8l2.1-5.2L8 9.5 6.3 11 5 9.5z"/></svg></button>
     <button class="tbtn t-switch" data-act="nextWeapon" aria-label="Switch weapon"><svg viewBox="0 0 24 24"><path d="M4 8h13l-3-3 1.4-1.4L21 9l-5.6 5.4L14 13l3-3H4zM20 16H7l3 3-1.4 1.4L3 15l5.6-5.4L10 11l-3 3h13z"/></svg></button>
     <button class="tbtn t-interact" data-act="interact" data-mode="hold" aria-label="Interact"><span>USE</span></button>
+    <button class="tbtn t-bino m-only" data-act="binoculars" aria-label="Binoculars"><svg viewBox="0 0 24 24"><path d="M4 9a3 3 0 0 1 6 0v6a3.5 3.5 0 1 1-7 0zm10 0a3 3 0 0 1 6 0l1 6a3.5 3.5 0 1 1-7 0zM10 10h4v3h-4z"/></svg></button>
+    <button class="tbtn t-thermal m-only" data-act="thermal" aria-label="Thermal"><span>IR</span></button>
+    <button class="tbtn t-bandage m-only" data-act="bandage" aria-label="Dress wound"><svg viewBox="0 0 24 24"><path d="M10 3h4v7h7v4h-7v7h-4v-7H3v-4h7z"/></svg></button>
+    <button class="tbtn t-prone m-only" data-act="prone" aria-label="Prone"><svg viewBox="0 0 24 24"><circle cx="5" cy="15" r="2.3"/><path d="M8 14h9l4 1v2h-5l-1 1H8z"/></svg></button>
+    <button class="tbtn t-zin m-only" data-act="zoomIn" aria-label="Zoom in"><span>+</span></button>
+    <button class="tbtn t-zout m-only" data-act="zoomOut" aria-label="Zoom out"><span>−</span></button>
   </div>
 
   <!-- ============================== LOADING -->
@@ -93,16 +150,27 @@
     <div class="menu-left">
       <div class="kicker">OPERATION</div>
       <h1 class="brand">GREYWATER</h1>
-      <div class="sub">Kestrel Freight Depot · 18:42 local</div>
+      <div class="sub" id="menu-sub">Two operations · choose your deployment</div>
       <nav class="menu-list" id="main-nav">
-        <button class="mbtn primary" data-cmd="play">Deploy</button>
+        <button class="mbtn primary" data-cmd="play" data-mode="depot" data-brief="brief-depot">Deploy · Kestrel Depot</button>
+        <button class="mbtn primary" data-cmd="play" data-mode="mountain" data-brief="brief-mountain">Mountain Survival</button>
         <button class="mbtn" data-cmd="controls">Controls</button>
         <button class="mbtn" data-cmd="settings">Settings</button>
       </nav>
       <div class="menu-foot" id="menu-foot">Mouse &amp; keyboard or touch · Landscape recommended</div>
     </div>
-    <aside class="brief">
-      <div class="brief-title">Briefing</div>
+    <aside class="brief hidden" id="brief-mountain">
+      <div class="brief-title">Briefing · Koh-e Zard highlands</div>
+      <p>A six-man reconnaissance team has been inserted into the high valleys by helicopter. Fighters hold the villages, ridgelines and observation posts around the landing zone, and they know you are here.</p>
+      <ul>
+        <li><b>01</b> Survive for ten minutes until the exfil helicopter returns.</li>
+        <li><b>02</b> You are the team's sniper: bolt rifle, marksman rifle, sidearm, laser binoculars with a thermal channel.</li>
+        <li><b>03</b> No medevac and no second chances — dress wounds yourself. If you go down, the mission is over.</li>
+      </ul>
+      <div class="brief-meta"><span>Hostiles <b>~26</b></span><span>Squad <b>5 + you</b></span><span>Terrain <b>2,000 m+</b></span></div>
+    </aside>
+    <aside class="brief" id="brief-depot">
+      <div class="brief-title">Briefing · Kestrel Freight Depot</div>
       <p>An armed cell has taken over a disused freight depot on the edge of the port. They are holding a stolen archive drive and expect a pickup tonight.</p>
       <ul>
         <li><b>01</b> Breach through the south-east yard.</li>
@@ -187,8 +255,18 @@
             <dt>1 2 3 · Wheel</dt><dd>Switch weapon</dd>
             <dt>Q / E</dt><dd>Lean left / right</dd>
             <dt>F</dt><dd>Interact (hold)</dd>
-            <dt>B</dt><dd>Rifle fire mode</dd>
+            <dt>V</dt><dd>Fire mode (B in the depot)</dd>
             <dt>Esc / P</dt><dd>Pause</dd>
+          </dl>
+          <div class="set-group">Mountain Survival</div>
+          <dl class="keys">
+            <dt>Z</dt><dd>Prone</dd>
+            <dt>B</dt><dd>Binoculars (LMB: laser range &amp; mark for the squad)</dd>
+            <dt>T</dt><dd>Thermal channel on the binoculars</dd>
+            <dt>H</dt><dd>Dress a wound (takes time)</dd>
+            <dt>Wheel (aiming)</dt><dd>Scope magnification</dd>
+            <dt>PgUp / PgDn</dt><dd>Scope zero (range)</dd>
+            <dt>Shift (aiming)</dt><dd>Hold breath</dd>
           </dl>
         </div>
         <div>
@@ -199,6 +277,7 @@
             <dt>Fire</dt><dd>Hold to shoot, drag while held to track</dd>
             <dt>Sight</dt><dd>Toggle aim down sights</dd>
             <dt>Buttons</dt><dd>Reload, crouch, jump, sprint, switch weapon</dd>
+            <dt>Mountain</dt><dd>Binoculars, IR, dressing, prone and scope zoom buttons</dd>
             <dt>USE</dt><dd>Appears when you can interact</dd>
           </dl>
           <p class="note">Tip: Ctrl+W closes browser tabs. In windowed mode use C to crouch, or play fullscreen.</p>
